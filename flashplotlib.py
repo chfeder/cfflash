@@ -1845,7 +1845,7 @@ if __name__ == "__main__":
     # parse arguments and check if a file was specified
     args = parse_args(process_args_locally=True)
     if args.filename is None:
-        print('No inputfile supplied.')
+        print('No inputfile supplied.', warn=True)
         try:
             args.filename = [sorted(glob.glob("*chk_????"))[-1]]
             print('Using the most recent checkpoint file available: %s'%args.filename[0])
