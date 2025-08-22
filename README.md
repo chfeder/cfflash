@@ -1,5 +1,7 @@
 # cfflash - tools for the Flash simulation code written by Christoph Federrath
 
+A collection of python and C++ tools for the simulation code FLASH.
+
 ### Copyright notes ###
 
 See LICENSE file.
