@@ -380,7 +380,7 @@ class FlashGG:
                 xdat = xdat.ravel(); ydat = ydat.ravel(); weights = weights.ravel()
                 # Accumulate 2D histogram of x vs. y
                 if not use_hist:
-                    weights_loc += stats.binned_statistic(xdat, values=ydat*weights, statistic='sum', bins=bin_edges)[0]
+                    weights_loc += stats.binned_statistic(xdat, values=ydat*weights, statistic='sum', bins=bin_edges[0])[0]
                 else:
                     weights_loc += stats.binned_statistic_2d(xdat, ydat, values=weights, statistic='sum', bins=bin_edges)[0]
             # MPI reduction operation
@@ -416,7 +416,7 @@ class FlashGG:
         y_ret = np.full(shape=len(bin_centres[0]), fill_value=np.nan)
         if statistic == 'sum':
             if not use_hist:
-                y_ret[good_ind] = np.sum(weights)[good_ind]
+                y_ret[good_ind] = np.sum(weights[good_ind])
             else:
                 y_ret[good_ind] = np.sum(weights*bin_centres[1], axis=1)[good_ind]
         if statistic == 'mean':
