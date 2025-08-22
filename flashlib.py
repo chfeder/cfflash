@@ -574,12 +574,12 @@ class Particles:
         self.filename = filen
         # set number of particles and particle properties
         self.n = 0
-        self.props = None
-        dsets = hdfio.get_dataset_names(self.filename)
-        if "particle names" in dsets:
+        self.dsets = None
+        h5_dsets = hdfio.get_dataset_names(self.filename)
+        if "particle names" in h5_dsets:
             names = hdfio.read(self.filename, "particle names")
             # set particle properties
-            self.props = [x[0].strip().decode() for x in names]
+            self.dsets = [x[0].strip().decode() for x in names]
             self.n = hdfio.get_shape(self.filename, "tracer particles")[0]
         # guess the particle types
         self.set_type()
@@ -589,14 +589,14 @@ class Particles:
         if self.verbose: print("determining particle types...")
         self.tracer_type = None
         self.sink_type = None
-        if self.props is None: return # return if there are no particles
+        if self.dsets is None: return # return if there are no particles
         self.types = [1]
         self.n_by_type = [self.n]
-        if 'type' in self.props:
-            types = self.read(prop='type')
+        if 'type' in self.dsets:
+            types = self.read('type')
             self.types = np.unique(types).astype(int)
             if self.verbose: print("file '"+self.filename+"' contains "+str(len(self.types))+" particle type(s) = "+str(self.types))
-            if 'accr_rate' in self.props:
+            if 'accr_rate' in self.dsets:
                 self.tracer_type = 1
                 self.sink_type = 2
             self.n_by_type = [(types==self.tracer_type).sum(), (types==self.sink_type).sum()]
@@ -605,7 +605,7 @@ class Particles:
                     print("Guessing tracer / dark matter particle type is "+str(self.tracer_type)+" with "+str(self.n_by_type[self.tracer_type-1])+" particle(s).")
                 if self.sink_type is not None: print("Guessing sink particle type is "+str(self.sink_type)+" with "+str(self.n_by_type[self.sink_type-1])+" particle(s).")
         else:
-            if 'accr_rate' in self.props:
+            if 'accr_rate' in self.dsets:
                 self.sink_type = 1
             else:
                 self.tracer_type = 1
@@ -622,54 +622,46 @@ class Particles:
             print("Number of sink particles = "+str(self.n_by_type[self.sink_type-1])+" (sink_type="+str(self.sink_type)+")")
         return
 
-    # read particles into dictionary (if prop is provided, read only that single particle property)
-    def read(self, prop=None, type=None):
+    # read particles
+    # dsets is the particle property(ies; in case of list input) to be read
+    # type is particle type
+    # box_bounds allows specifying a bounding box for the read
+    def read(self, dsets=["posx", "posy", "posz"], type=None, box_bounds=None):
+        from builtins import type as type_bi
         if self.n == 0: return None # return if we don't have any particles
         # if user wants a specific type, we first check whether the type is actually present
         if type is not None:
             error = False
-            if len(self.types) > 1: # there are actually mutliple types
+            if len(self.types) > 1: # there are mutliple particle types
                 if type not in self.types: error = True # user requested a non-existent type
             elif type != 1: error = True # user requested a non-existent type
-            if error: # return
-                print("Error. Particle type "+str(type)+" not in file (available types are", self.types, "). Returning None.")
-                return None
-        # user requests a specific particle property (prop)
-        if prop is not None:
-            # find requested particle property index
-            index = np.argwhere(np.array(self.props) == prop).flatten()[0]
-            ind = np.s_[:,index] # use index to pass to hdfio for hyperslab selection
-            particles = hdfio.read(self.filename, "tracer particles", ind=ind)
-            if (type is None) or (len(self.types)==1):
-                return particles # return particle property without type distinction
-            else: # there are in fact different types in file
-                index = np.argwhere(np.array(self.props) == "type").flatten()[0]
-                ind = np.s_[:,index] # use index to pass to hdfio for hyperslab selection
-                particles_type = hdfio.read(self.filename, "tracer particles", ind=ind)
-                return particles[particles_type==type]
-        else: # we read all particles properties and return a dictionary
-            particles = hdfio.read(self.filename, "tracer particles")
-            p_dict = dict(zip(self.props, particles.T))
-            if (type is None) or (len(self.types)==1):
-                return p_dict # return the whole particle dict without type distinction
-            else: # there are in fact different types in file
-                ind = np.where(p_dict["type"]==type)
-                p_dict_type = {k:p_dict[k][ind] for k in p_dict.keys()}
-                if self.verbose: print("Returning dictionary only containing type "+str(type))
-                return p_dict_type
-
-    # return indices of particles in requested bounding box (bb[3,2] with 1st index x,y,z, and 2nd index min,max)
-    def find(self, bb=None, type=None):
-        if bb is None:
-            print("Need to provide bounding box for search; keyword bb=[3,2], with 1st index x,y,z, and 2nd index min,max.")
-            return None
-        bb = np.array(bb) # turn into numpy array
-        particles = self.read(type=type) # read particles
-        pos = np.array([particles["posx"], particles["posy"], particles["posz"]]) # positions
-        ind = np.full(particles["posx"].shape, True) # start with all True elements
-        for dir in range(3): # find in bb
-            ind = np.logical_and(ind, np.logical_and(pos[dir,:] >= bb[dir,0], pos[dir,:] <= bb[dir,1]))
-        return ind # return indices of particles in bb
+            if error:
+                print("Particle type "+str(type)+" not in file (available types are", self.types, ").", error=True)
+            type_arr = self.read("type", box_bounds=box_bounds)
+            type_ind = type_arr == type # get the indices matching the type
+        if box_bounds is not None:
+            box_bounds = np.array(box_bounds) # turn into numpy array
+            pos = self.read(['posx', 'posy', 'posz'], type=type) # read particle positions
+            bb_ind = np.full(pos[0].shape, True) # start with all True elements
+            for dir in range(3): # find in box_bounds
+                bb_ind = np.logical_and(bb_ind, np.logical_and(pos[dir,:] >= box_bounds[dir,0], pos[dir,:] <= box_bounds[dir,1]))
+        if type is not None and box_bounds is not None:
+            combined_ind = type_ind & bb_ind
+        if type_bi(dsets) != list: dsets = [dsets] # if user only supplies a single dset, turn into list of 1 element for internal processing
+        data = []
+        for dset in dsets:
+            index = self.dsets.index(dset) # find requested particle dataset index
+            ind = np.s_[:,index] # index to pass to hdfio for hyperslab selection
+            # read particle dset without type distinction
+            data.append(hdfio.read(self.filename, "tracer particles", ind=ind))
+            if type is not None and box_bounds is not None:
+                data[-1] = data[-1][combined_ind] # combined slicing
+            else:
+                if type is not None: data[-1] = data[-1][type_ind] # type slicing
+                if box_bounds is not None: data[-1] = data[-1][bb_ind] # box_bound slicing
+        # return
+        if len(dsets) == 1: data = data[0] # strip first dim if only 1 dset was requested
+        return np.array(data)
 
     # return the total sink-gas gravitational interaction potential due to all sinks at a cell position
     def GetSinkGasPot(self, cell_pos):
@@ -687,14 +679,11 @@ class Particles:
         # Convert soft_radius to dx_min
         soft_radius *= dx_min
         # Obtain radial distance to position
-        sinks_xpos = self.read(prop="posx", type=self.sink_type)
-        sinks_ypos = self.read(prop="posy", type=self.sink_type)
-        sinks_zpos = self.read(prop="posz", type=self.sink_type)
-        sinks_mass = self.read(prop="mass", type=self.sink_type)
+        sinks = self.read(["posx", "posy", "posz", "mass"], type=self.sink_type)
         # Get radial distances to each sink
-        rdist = (np.ones(len(sinks_xpos)) * cell_pos[0] - sinks_xpos)**2 + \
-                (np.ones(len(sinks_ypos)) * cell_pos[1] - sinks_ypos)**2 + \
-                (np.ones(len(sinks_zpos)) * cell_pos[2] - sinks_zpos)**2
+        rdist = (np.ones(len(sinks[0])) * cell_pos[0] - sinks[0])**2 + \
+                (np.ones(len(sinks[1])) * cell_pos[1] - sinks[1])**2 + \
+                (np.ones(len(sinks[2])) * cell_pos[2] - sinks[2])**2
         # Linear softening
         if soft_type == 'linear':
             def linear_soft(r, r_soft):
@@ -705,7 +694,7 @@ class Particles:
                 # else usual potential for point mass, i.e. phi = -GM/r
                 else:
                     return -1/r
-            prefactor_grav = cfp.constants.g_n * sinks_mass
+            prefactor_grav = cfp.constants.g_n * sinks[3]
             phi_soften = np.vectorize(linear_soft, excluded=['r_soft'])
             return phi_soften(rdist, r_soft=soft_radius)
         else:
@@ -1141,7 +1130,7 @@ def read_sink_masses(flash_file):
     if is_part_file(flash_file) or is_plt_file(flash_file) or is_chk_file(flash_file):
         particles_obj = Particles(flash_file, verbose=0)
         if particles_obj.sink_type is not None:
-            sink_masses = particles_obj.read(prop="mass", type=particles_obj.sink_type)
+            sink_masses = particles_obj.read("mass", type=particles_obj.sink_type)
     return sink_masses
 # ================== end: read_sink_masses ====================
 
