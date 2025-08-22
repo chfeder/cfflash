@@ -81,7 +81,7 @@ class FlashGG:
                                        [self.runtime_params['zmin'], self.runtime_params['zmax']]])
         # define an analysis centre (e.g., for radial profiles; call to SetAnalysisCentre)
         self.centre = np.mean(self.domain_bounds, axis=1) # center of the simulation box
-        self.hist_2d_buffer = None # buffer storage for 2D histograms
+        self.binned_stats_buffer = None # buffer storage for binned_statistics
 
     def GetMyBlocks(self, MyPE, NPE, BlockList=None, allow_idle_cores=False):
         if BlockList is None: BlockList = self.LeafBlocks # default is to distribute all leaf blocks
@@ -322,13 +322,14 @@ class FlashGG:
     # Options for 'bin_type' = ['lin', 'log'] for linear or logarithmic binning.
     # Set 'remove_nan'=True to remove NaN from output.
     def binned_statistic(self, x='radius', y='dens', centre=None, weight='vol', statistic='mean', bins=[300, 200],
-                         range=[[None, None], [None, None]], bin_type=['lin', 'lin'], remove_nan=False, use_hist=True, verbose=1):
+                         range=[[None, None], [None, None]], bin_type=['lin', 'lin'], remove_nan=False, use_hist=False, verbose=1):
         if verbose: print("Total number of MPI ranks = "+str(nPE))
         if MPI: comm.Barrier()
-        # get input arguments
+        # handle input arguments
+        if use_hist:
+            print("use_hist=True; using histogram mode to compute statistics depends on binning!", warn=True)
         if statistic.split('_')[0] == 'per' and not use_hist:
-            print("percentile statistic only available when use_hist=True", error=True)
-
+            print("Percentile statistic only available when use_hist=True", error=True)
         from inspect import currentframe, getargvalues
         frame = currentframe()
         args_info = getargvalues(frame)
@@ -336,8 +337,8 @@ class FlashGG:
         if args_info.varargs: args[args_info.varargs] = args_info.locals[args_info.varargs]
         if args_info.keywords: args[args_info.keywords] = args_info.locals[args_info.keywords]
         # --- helper function to compute 2D histogram ---
-        def hist2d():
-            if verbose: print('generating new 2D histogram...')
+        def get_binned_stats():
+            if verbose: print('Computing binned statistic...')
             if verbose > 1: print('binning x='+x+' vs. y='+y)
             if centre is not None: self.SetCentre(centre) # defining the centre
             bin_edges = [[],[]]
@@ -362,53 +363,75 @@ class FlashGG:
                     if verbose > 1: print('bins already defined')
                     bin_edges  [iq] = np.array(bins[iq])
                     bin_centres[iq] = (bin_edges[iq][:-1]+bin_edges[iq][1:])/2 # assume centres are in the arithmetic middle
-            bin_widths = [bin_edges[d][1:]-bin_edges[d][:-1] for d in [0,1]]
-            if verbose: print('Computing statistic for x='+x+' vs. y='+y)
             if not use_hist:
-                weights_loc = np.zeros(len(bin_edges[0])-1) # init the local 1D weights array with zeros
+                weights_loc = np.zeros(len(bin_edges[0])-1)
+                data_loc    = np.zeros(len(bin_edges[0])-1)
+                data_sq_loc = np.zeros(len(bin_edges[0])-1)
             else:
                 weights_loc = np.zeros([len(bin_edges[0])-1, len(bin_edges[1])-1]) # init the local 2D weights array with zeros
             MyBlocks = self.GetMyBlocks(myPE, nPE) # domain decomposition
             for b in tqdm(MyBlocks, disable=(self.verbose==0 or myPE!=0), desc=cfp.get_frame().signature): # block loop
                 xdat, ydat = self.ReadBlockVar(b, dsets=[x, y]) # contains all dataset values
                 vol = np.zeros([self.NB[0], self.NB[1], self.NB[2]]) + np.prod(self.D[b]) # contains all volume values
-                # weight array is calculated based on masses or volumes
                 if weight == 'vol': weights = vol
                 if weight == 'mass': weights = vol * self.ReadBlockVar(b, dsets='dens')
-                if statistic == 'sum': weights = np.zeros([self.NB[0], self.NB[1], self.NB[2]]) + 1
+                if statistic == 'sum': weights = np.ones(self.NB)
                 # For 2D binning, making the dset_arr, weight_arr 1D is necessary
                 xdat = xdat.ravel(); ydat = ydat.ravel(); weights = weights.ravel()
                 # Accumulate 2D histogram of x vs. y
                 if not use_hist:
-                    weights_loc += stats.binned_statistic(xdat, values=ydat*weights, statistic='sum', bins=bin_edges[0])[0]
+                    weights_loc += stats.binned_statistic(xdat, values=weights, statistic='sum', bins=bin_edges[0])[0]
+                    if statistic == 'sum':
+                        data_loc += stats.binned_statistic(xdat, values=ydat, statistic='sum', bins=bin_edges[0])[0]
+                    else:
+                        data_loc += stats.binned_statistic(xdat, values=weights*ydat, statistic='sum', bins=bin_edges[0])[0]
+                        if statistic == 'std':
+                            data_sq_loc += stats.binned_statistic(xdat, values=weights*ydat**2, statistic='sum', bins=bin_edges[0])[0]
                 else:
                     weights_loc += stats.binned_statistic_2d(xdat, ydat, values=weights, statistic='sum', bins=bin_edges)[0]
             # MPI reduction operation
             if MPI:
                 weights_tot = np.zeros(np.shape(weights_loc))
-                comm.Allreduce(weights_loc, weights_tot, op=MPI.SUM) # every MPI rank gets the summed global (tot) weights array
+                comm.Allreduce(weights_loc, weights_tot, op=MPI.SUM) # every MPI rank gets the summed global weights
+                if not use_hist:
+                    data_tot = np.zeros(np.shape(data_loc))
+                    comm.Allreduce(data_loc, data_tot, op=MPI.SUM) # every MPI rank gets the summed global
+                    data_sq_tot = np.zeros(np.shape(data_sq_loc))
+                    comm.Allreduce(data_sq_loc, data_sq_tot, op=MPI.SUM) # every MPI rank gets the summed global
             else:
                 weights_tot = weights_loc
+                if not use_hist:
+                    data_tot = data_loc
+                    data_sq_tot = data_sq_loc
             # fill the output buffer
-            self.hist_2d_buffer = {'args':args, 'weights':weights_tot, 'bin_edges':bin_edges,
-                                   'bin_centres':bin_centres, 'bin_widths':bin_widths}
-        # --- END: hist2d() ---
-        # check whether we can re-use the existing 2D histogram (e.g., if only 'stat' was changed)
-        generate_2D_histogram = False
-        if self.hist_2d_buffer is None: generate_2D_histogram = True # first time the function was called
-        else: # the function was called before
-            for arg in args.keys():
-                if arg in ['x', 'y', 'centre', 'weight', 'bins', 'range', 'bin_type']:
-                    if np.any(self.hist_2d_buffer['args'][arg] != args[arg]): generate_2D_histogram = True
-        # get binned statistic 2D
-        if generate_2D_histogram: hist2d() # call hist2d()
+            if use_hist:
+                data_tot = None
+                data_sq_tot = None
+            self.binned_stats_buffer = {'args':args, 'weights':weights_tot, 'data':data_tot, 'data_sq':data_sq_tot,
+                                        'bin_edges':bin_edges, 'bin_centres':bin_centres}
+        # --- END: get_binned_stats() ---
+        if use_hist:
+            # check whether we can re-use the existing 2D histogram (e.g., if only 'stat' was changed)
+            call_get_binned_stats = False
+            if self.binned_stats_buffer is None: call_get_binned_stats = True # first time the function was called
+            else: # the function was called before
+                for arg in args.keys():
+                    if arg in ['x', 'y', 'centre', 'weight', 'bins', 'range', 'bin_type']:
+                        if np.any(self.binned_stats_buffer['args'][arg] != args[arg]): call_get_binned_stats = True
         else:
-            if verbose: print('re-using existing 2D histogram...')
-        # compute statistic from histogram
-        if verbose: print('Computing '+weight+'-weighted '+statistic+' of x='+x+' vs. y='+y)
-        weights = self.hist_2d_buffer['weights']
-        bin_edges = self.hist_2d_buffer['bin_edges']
-        bin_centres = self.hist_2d_buffer['bin_centres']
+            call_get_binned_stats = True
+        # get binned statistic
+        if call_get_binned_stats:
+            get_binned_stats()
+        else:
+            if verbose: print('Re-using existing binned statistic buffer...')
+        # compute statistics
+        if verbose: print('Computing '+weight+'-weighted '+statistic+' of y='+y+' as a function of x='+x)
+        weights = self.binned_stats_buffer['weights']
+        data = self.binned_stats_buffer['data']
+        data_sq = self.binned_stats_buffer['data_sq']
+        bin_edges = self.binned_stats_buffer['bin_edges']
+        bin_centres = self.binned_stats_buffer['bin_centres']
         if not use_hist:
             good_ind = weights > 0
         else:
@@ -416,23 +439,27 @@ class FlashGG:
         y_ret = np.full(shape=len(bin_centres[0]), fill_value=np.nan)
         if statistic == 'sum':
             if not use_hist:
-                y_ret[good_ind] = np.sum(weights[good_ind])
+                y_ret[good_ind] = data[good_ind]
             else:
                 y_ret[good_ind] = np.sum(weights*bin_centres[1], axis=1)[good_ind]
         if statistic == 'mean':
-            y_ret[good_ind] = np.sum(weights*bin_centres[1], axis=1)[good_ind] / np.sum(weights, axis=1)[good_ind]
+            if not use_hist:
+                y_ret[good_ind] = data[good_ind] / weights[good_ind]
+            else:
+                y_ret[good_ind] = np.sum(weights*bin_centres[1], axis=1)[good_ind] / np.sum(weights, axis=1)[good_ind]
         if statistic == 'std':
-            mean = np.full(shape=len(bin_centres[0]), fill_value=np.nan)
-            mean[good_ind] = np.sum(weights*bin_centres[1], axis=1)[good_ind] / np.sum(weights, axis=1)[good_ind]
-            y_ret[good_ind] = np.sum(weights*bin_centres[1]**2, axis=1)[good_ind] / np.sum(weights, axis=1)[good_ind]
-            y_ret[good_ind] = np.sqrt(y_ret[good_ind]-mean[good_ind]**2)
+            if not use_hist:
+                y_ret[good_ind] = np.sqrt( data_sq[good_ind] / weights[good_ind] - (data[good_ind] / weights[good_ind])**2 )
+            else:
+                y_ret[good_ind] = np.sqrt( np.sum(weights*bin_centres[1]**2, axis=1)[good_ind] / np.sum(weights, axis=1)[good_ind] -
+                                           (np.sum(weights*bin_centres[1], axis=1)[good_ind] / np.sum(weights, axis=1)[good_ind])**2 )
         if statistic.split('_')[0] == 'per':
             def CDF_per(xarray, yarray, per):
-                ycdf = 100*(np.cumsum(yarray)/np.sum(yarray))
+                ycdf = 100 * np.cumsum(yarray) / np.sum(yarray)
                 idx = np.max(np.where(ycdf<=per)[0])
                 return xarray[idx]
             percentile = float(statistic.split('_')[1])
-            for i in range(len(good_ind)):
+            for i in np.arange(len(good_ind)):
                 if good_ind[i]: y_ret[i] = CDF_per(bin_centres[1], weights[i,:], percentile)
         if remove_nan: x_cen = x_cen[good_ind]; y_ret = y_ret[good_ind]
         # define return class
