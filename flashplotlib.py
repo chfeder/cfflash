@@ -1646,10 +1646,10 @@ def process_file(filen, args):
                     max_loc = gg.GetMinMax(datasetname="pden").max_loc
                     if args.verbose: print("Location of max particle density = "+str(max_loc))
                 if args.centre_on == "max_sink":
-                    fp = fl.Particles(filen.replace("plt_cnt", "part"), verbose=0)
-                    sinks = fp.read(type=fp.sink_type)
-                    imax = np.argmax(sinks["mass"])
-                    max_loc = np.array([sinks["posx"][imax], sinks["posy"][imax], sinks["posz"][imax]])
+                    fp = fl.Particles(filen, verbose=0)
+                    sinks = fp.read(["posx", "posy", "posz", "mass"], type=fp.sink_type)
+                    imax = np.argmax(sinks[3])
+                    max_loc = np.array([sinks[0][imax], sinks[1][imax], sinks[2][imax]])
                     if args.verbose: print("Location of most massive sink particle = "+str(max_loc))
                 # if user provided a projection range, we use the user extent, but centre on the max location
                 if args.range is not None:
