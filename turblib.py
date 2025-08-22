@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# written by Christoph Federrath, 2019-2024
+# written by Christoph Federrath, 2019-2025
 
 import astropy.io.ascii as ap_ascii
 import astropy.table as ap_table
