@@ -68,7 +68,7 @@ def get_ics(resolution=None, lrefine_max=1, nxb=8, nblockx=1, L=1.2e17, domain='
         print('=== Derived cloud properties ===:')
         print(' Mass (M) = ', '{:5.4e}'.format(M), ' g (', '{:5.4e}'.format(M/m_sol), ' M_sol)')
         if domain == 'box':
-            print(' --- The following values are based on a sphere of *effective* radius (see above), and are only approximate for a box domain ---')
+            print(' --- The following values are for a sphere of *effective* radius (see above), and only approximate for a box domain ---')
         print(' Virial parameter (isolated, spherical approximation) = ', '{:5.4}'.format(alpha_vir))
         print(' Number of Jeans masses (spherical Jeans mass approximation) = ', '{:5.4}'.format(M/cfp.MJ(rho, c_s)))
         print(' Freefall time (t_ff) = ', '{:5.4e}'.format(t_ff), ' s (', '{:5.4e}'.format(t_ff/year), ' yr)')
@@ -154,13 +154,15 @@ def get_ics(resolution=None, lrefine_max=1, nxb=8, nblockx=1, L=1.2e17, domain='
 # ===== the following applies in case we are running this in script mode =====
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Provides overview of initial conditions.')
-    parser.add_argument("-resolution", "--resolution", type=int, help="(maximum effective uniform) grid resolution (if set, lrefine_max, nxb, nblockx, are ignored)")
+    parser = argparse.ArgumentParser(description='Provides summary of cloud initial conditions.')
+    parser.add_argument("-resolution", "--resolution", type=int,
+                        help="(maximum effective uniform) grid resolution (if set, lrefine_max, nxb, nblockx, are ignored)")
     parser.add_argument("-lrefine_max", "--lrefine_max", type=int, default=1, help="maximum refinement level")
     parser.add_argument("-nxb", "--nxb", type=int, default=8, help="number of cells per block per dimension")
     parser.add_argument("-nblockx", "--nblockx", type=int, default=1, help="number of blocks per dimension on base grid")
     parser.add_argument("-L", "--L", type=float, default=1.2e17, help="size of box")
-    parser.add_argument("-domain", "--domain", type=str, choices=['sphere', 'cylinder', 'box'], help="domain shape (sphere, cylinder, or box; H applies only to cylinder; for box only L)", default='sphere')
+    parser.add_argument("-domain", "--domain", type=str, choices=['sphere', 'cylinder', 'box'],
+                        help="domain shape (sphere, cylinder, or box; H applies only to cylinder; for box only L)", default='sphere')
     parser.add_argument("-R", "--R", type=float, default=5.0e16, help="radius of sphere")
     parser.add_argument("-H", "--H", type=float, default=3.31e16, help="half height of cylinder")
     parser.add_argument("-rho", "--rho", type=float, default=3.82e-18, help="density")
