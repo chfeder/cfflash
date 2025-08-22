@@ -12,7 +12,7 @@ import argparse
 # ===== the following applies in case we are running this in script mode =====
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Create a movie out of projections/slices.')
+    parser = argparse.ArgumentParser(description='Create frames for movie.')
     #parser.add_argument("-i", "--i", dest='files', nargs='*', help="HDF5 input file(s)")
     args0 = parser.parse_args()
 
