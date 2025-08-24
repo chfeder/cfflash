@@ -2,12 +2,17 @@
 # -*- coding: utf-8 -*-
 # written by Christoph Federrath, 2019-2025
 
+from cfpack import print, hdfio, stop
+from cfpack.mpi import MPI, comm, myPE, nPE
+import cfpack.constants as const
+import cfpack as cfp
+import flashlib as fl
+import argparse
 import os, sys
 import numpy as np
-import argparse
+import glob
 import timeit
 import tempfile
-import subprocess
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.path as mpath
@@ -18,11 +23,6 @@ try:
     import cmasher as cmr
 except:
     pass
-import flashlib as fl
-import cfpack.constants as const
-import cfpack as cfp
-from cfpack import print, hdfio, stop
-import glob
 
 # =============== flashplotlib class ===============
 class flashplotlib:
@@ -540,10 +540,10 @@ class flashplotlib:
 
     # ============= plot_map =============
     def plot_map(self, map_only=False, normalize=None, dpi=300):
-
         # function that shows or saves the plot window
         def show_or_save():
             globals()['end_time'] = timeit.default_timer()
+            if myPE != 0: return
             # save figure
             for outtype in self.outtype:
                 if outtype == 'screen': continue
@@ -650,8 +650,9 @@ class flashplotlib:
         fig = plt.figure(figsize=figsize, dpi=dpi)
 
         if colorbar_only:
-            cb = draw_colorbar(colorbar_only=True, norm=norm)
+            draw_colorbar(colorbar_only=True, norm=norm)
             show_or_save()
+            if MPI: comm.Barrier()
             return
 
         ax = plt.gca() # get current axes
@@ -935,6 +936,7 @@ class flashplotlib:
             ax.set_visible(False)
 
         show_or_save()
+        if MPI: comm.Barrier()
 
     # ============= end: plot_map =============
 
@@ -1270,7 +1272,7 @@ def animate(nframes=100, dframe=1, ease_func=easeInOutQuad, value_beg=None, valu
 
 # ========================================================
 def call_projection(plt_filename, datasetname='dens', slice=None, direction='z', mass_weighting=False, proj_range=None,
-                    zoom=None, pixel=[1024,1024], ncpu=8, outdir='.', data_range=None, view_angle=None,
+                    zoom=None, pixel=[1024,1024], ncpu=nPE, outdir='.', data_range=None, view_angle=None,
                     rotation_angle=None, rotation_axis=None, rotation_centre=None, spherical_weight_radii=[None,None],
                     do_particles=True, boundary=None, opacity_weight=None, split_cells=False, verbose=1):
     # set the return filename and datasetname
@@ -1359,11 +1361,13 @@ def call_projection(plt_filename, datasetname='dens', slice=None, direction='z',
           zoom_str+data_range_str+output_str+no_particles_str+view_angle_str+rotation_angle_str+rotation_axis_str+rotation_centre_str+\
           sp_r_max_str+sp_r_chr_str+boundary_str+opacity_str+split_cells_str+starfield_str
     # call projection
-    if verbose > 1: print("============= START projection =============")
-    p = cfp.run_shell_command(cmd)
-    if p.returncode != 0:
-        print("call to FLASH projection (C++) failed with an error - check output above.", error=True)
-    if verbose > 1: print("============= END projection =============")
+    if myPE == 0:
+        if verbose > 1: print("============= START projection =============")
+        p = cfp.run_shell_command(cmd)
+        if p.returncode != 0:
+            print("call to FLASH projection (C++) failed with an error - check output above.", error=True)
+        if verbose > 1: print("============= END projection =============")
+    if MPI: comm.Barrier()
     # return
     if rotation_angle is not None: ret_filename += "_rotated"
     return ret_filename+'.h5', ret_datasetname
@@ -1372,7 +1376,7 @@ def call_projection(plt_filename, datasetname='dens', slice=None, direction='z',
 
 # ========================================================
 def call_extractor(plt_filename, datasetname='dens', mass_weighting=False, extraction_range=None,
-                   pixel=[128,128,128], ncpu=8, outdir='.', verbose=1):
+                   pixel=[128,128,128], ncpu=nPE, outdir='.', verbose=1):
     # get actual filename (with leading directory path removed)
     ind = plt_filename.rfind('/') + 1
     # construct output file name including path
@@ -1395,10 +1399,12 @@ def call_extractor(plt_filename, datasetname='dens', mass_weighting=False, extra
         mpi_cmd = ""
         ncpu = ""
     cmd = mpi_cmd+str(ncpu)+" extractor_mpi '"+plt_filename+"'"+dataset_str+pixel_str+mw_str+extraction_range_str+output_str
-    # call projection
-    if verbose > 1: print("============= START extraction =============")
-    run_shell_command(cmd)
-    if verbose > 1: print("============= END extraction =============")
+    # call extractor
+    if myPE == 0:
+        if verbose > 1: print("============= START extraction =============")
+        cfp.run_shell_command(cmd)
+        if verbose > 1: print("============= END extraction =============")
+    if MPI: comm.Barrier()
     # return
     return ret_filename
 # ============= end: call_extractor =============
@@ -1412,7 +1418,7 @@ def parse_args(process_args_locally=False):
     parser.add_argument("-i", "--i", dest='filename', nargs='*', help="HDF5 input file(s)")
     parser.add_argument("-d", "--d", dest='datasetname', default='dens', type=str, help="HDF5 dataset name")
     parser.add_argument("-verbose", "--verbose", type=int, default=1, help="Verbose level")
-    parser.add_argument("-outtype", "--outtype", action='append', nargs='?', default=[], choices=['screen', 'pdf', 'eps', 'png', 'jpg'], help="Output type")
+    parser.add_argument("-outtype", "--outtype", "-ot", action='append', nargs='?', default=[], choices=['screen', 'pdf', 'eps', 'png', 'jpg'], help="Output type")
     parser.add_argument("-outname", "--outname", type=str, help="Output file name")
     parser.add_argument("-outdir", "--outdir", type=str, default='.', help="Output directory")
     parser.add_argument("-lowres", "--lowres", action='store_true', default=False, help="Do low-resolution screen output, e.g., for remote plotting")
@@ -1483,7 +1489,7 @@ def parse_args(process_args_locally=False):
     parser.add_argument("-stream_thick", "--stream_thick", type=float, default=1.0, help="Streamline thickness in relative units (default: %(default)s)")
     parser.add_argument("-stream_n", "--stream_n", type=int, nargs='*', default=[None], help="Number of streamlines")
     parser.add_argument("-stream_color", "--stream_color", type=str, default='blue', help="Color of streamlines")
-    parser.add_argument("-ncpu", "--ncpu", type=int, default=8, help="Number of cores for FLASH 'projection' (C++)")
+    parser.add_argument("-ncpu", "--ncpu", type=int, default=nPE, help="Number of cores for FLASH 'projection' (C++)")
     parser.add_argument("-show_blocks", "--show_blocks", type=int, nargs='*', help="Show FLASH block structure (can provide list of AMR levels)")
     parser.add_argument("-show_grid", "--show_grid", type=int, nargs='*', help="Show FLASH grid cells (can provide list of AMR levels)")
     parser.add_argument("-dpi", "--dpi", type=float, help="DPI for output")
