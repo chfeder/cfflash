@@ -939,7 +939,7 @@ class flashplotlib:
 
     # ============= plot_3d =============
     def plot_3d(self, filename, datasetname, slice=True, volume=False, streamlines=False, proj_range=None, data_range=None,
-                pixel=128, ncpu=8, zoom=1.0, outdir=None, mass_weighting=False, mlab_axes=False, mlab_triad=True, mlab_cbar=True,
+                pixel=128, ncpu=nPE, zoom=1.0, outdir=None, mass_weighting=False, mlab_axes=False, mlab_triad=True, mlab_cbar=True,
                 vmin=None, vmax=None, view=None, move=None, map_only=False, outline=0, dpi=300):
 
         if self.verbose > 1: print("importing mayavi...")
@@ -1485,7 +1485,6 @@ def parse_args(process_args_locally=False):
     parser.add_argument("-stream_thick", "--stream_thick", type=float, default=1.0, help="Streamline thickness in relative units (default: %(default)s)")
     parser.add_argument("-stream_n", "--stream_n", type=int, nargs='*', default=[None], help="Number of streamlines")
     parser.add_argument("-stream_color", "--stream_color", type=str, default='blue', help="Color of streamlines")
-    parser.add_argument("-ncpu", "--ncpu", type=int, default=nPE, help="Number of cores for FLASH 'projection' (C++)")
     parser.add_argument("-show_blocks", "--show_blocks", type=int, nargs='*', help="Show FLASH block structure (can provide list of AMR levels)")
     parser.add_argument("-show_grid", "--show_grid", type=int, nargs='*', help="Show FLASH grid cells (can provide list of AMR levels)")
     parser.add_argument("-dpi", "--dpi", type=float, help="DPI for output")
@@ -1727,7 +1726,7 @@ def process_file(filen, args):
                                                      mass_weighting=mw_for_projection[i], proj_range=args.range, view_angle=args.view_angle,
                                                      rotation_angle=args.rot_angle, rotation_axis=args.rot_axis, rotation_centre=args.rot_centre,
                                                      spherical_weight_radii=args.spherical_weight_radii, data_range=data_range,
-                                                     zoom=args.zoom, pixel=args.pixel, ncpu=args.ncpu, outdir=args.outdir,
+                                                     zoom=args.zoom, pixel=args.pixel, ncpu=nPE, outdir=args.outdir,
                                                      do_particles=do_particles, boundary=args.boundary, opacity_weight=args.opacity_weight,
                                                      split_cells=args.split_cells)
                 if len(requested_datasetnames) == 1: # just one datasetname
@@ -1834,7 +1833,7 @@ def process_file(filen, args):
         if 'triad' in args.p3d_options: triad = True
         else: triad = False
         fpl.plot_3d(filen, args.datasetname, slice=slice_3d, volume=volume, streamlines=stream_3d, proj_range=args.range, data_range=args.data_range,
-            pixel=args.pixel, ncpu=args.ncpu, zoom=args.zoom, outdir=args.outdir, mass_weighting=args.mw, mlab_axes=axes, mlab_triad=triad, mlab_cbar=True,
+            pixel=args.pixel, ncpu=nPE, zoom=args.zoom, outdir=args.outdir, mass_weighting=args.mw, mlab_axes=axes, mlab_triad=triad, mlab_cbar=True,
             vmin=args.vmin, vmax=args.vmax, view=args.p3d_view, move=args.p3d_move, map_only=False, outline=0, dpi=args.dpi)
     # restore original args.datasetname
     args.datasetname = datasetname_saved
