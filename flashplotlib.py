@@ -542,8 +542,6 @@ class flashplotlib:
     def plot_map(self, map_only=False, normalize=None, dpi=300):
         # function that shows or saves the plot window
         def show_or_save():
-            globals()['end_time'] = timeit.default_timer()
-            if myPE != 0: return
             # save figure
             for outtype in self.outtype:
                 if outtype == 'screen': continue
@@ -652,7 +650,6 @@ class flashplotlib:
         if colorbar_only:
             draw_colorbar(colorbar_only=True, norm=norm)
             show_or_save()
-            if MPI: comm.Barrier()
             return
 
         ax = plt.gca() # get current axes
@@ -936,7 +933,6 @@ class flashplotlib:
             ax.set_visible(False)
 
         show_or_save()
-        if MPI: comm.Barrier()
 
     # ============= end: plot_map =============
 
@@ -1823,7 +1819,9 @@ def process_file(filen, args):
     # make a map plot
     if args.p3d is None: # 2D plotting
         fpl.prep_map(filen, args.datasetname) # read data
-        fpl.plot_map(map_only=args.map_only, dpi=args.dpi) # make 2D plot
+        if myPE == 0:
+            fpl.plot_map(map_only=args.map_only, dpi=args.dpi) # make 2D plot
+        if MPI: comm.Barrier()
     else: # 3D plotting
         if 'slice' in args.p3d: slice_3d = True
         else: slice_3d = False
@@ -1867,5 +1865,6 @@ if __name__ == "__main__":
         # process file
         process_file(filen, args)
     # time the script
+    end_time = timeit.default_timer()
     total_time = end_time - start_time
     if args.verbose: print("***************** time to finish = "+str(total_time)+"s *****************")
