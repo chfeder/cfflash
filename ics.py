@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # written by Christoph Federrath and Bella Gerrard, 2020-2025
 
-from cfpack.defaults import *
+from cfpack.defaults import print, stop
 import cfpack as cfp
 import numpy as np
 import argparse
@@ -10,6 +10,8 @@ import argparse
 # === get_ics ===
 def get_ics(resolution=None, lrefine_max=1, nxb=8, nblockx=1, L=1.2e17, domain='sphere', R=5.0e16, H=0.0,
             rho=3.82e-18, sigma_v=1e-99, Omega=1.86e-13, B=100.e-6, mu=2.3, quiet=False):
+
+    from cfpack.constants import au, m_p, g_n, year, m_sol
 
     if not quiet:
         print('=== Overview of initial conditions based on input parameters ===:')
