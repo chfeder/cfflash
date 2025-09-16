@@ -3,8 +3,7 @@
 # written by Christoph Federrath, 2020-2025
 
 import cfpack as cfp
-from cfpack import hdfio
-from cfpack.defaults import *
+from cfpack import hdfio, print, stop
 from cfpack.mpi import MPI, comm, nPE, myPE
 import argparse
 import numpy as np
@@ -807,12 +806,14 @@ class datfile:
         return ynew
 
     # plot
-    def plot_column(self, ycol, xcol=0):
+    def plot_column(self, ycol, xcol=0, cfpack_plot_style=True):
         xc = self.col_ind(xcol)
         yc = self.col_ind(ycol)
         xlabel = cfp.tex_escape(self.header[xc])
         ylabel = cfp.tex_escape(self.header[yc])
+        if cfpack_plot_style: cfp.load_plot_style()
         cfp.plot(x=self.dat[:,xc], y=self.dat[:,yc], xlabel=xlabel, ylabel=ylabel, show=True)
+        if cfpack_plot_style: cfp.unload_plot_style()
         return
 
     # get column index
@@ -982,7 +983,7 @@ class logfile:
         print(" Block size: ", newline=False, color='cyan'); print(self.NB[self.run], no_prefix=True)
         print(" Number of cores used: ", newline=False, color='cyan'); print(str(self.n_procs[self.run]), no_prefix=True)
 
-    def get_performance_info(self, dump=True, plot=False):
+    def get_performance_info(self, dump=True, plot=False, cfpack_plot_style=True):
         steps = self.timestep_info[self.run]
         def get_wallclock_time(run):
             compute_time = 0.0
@@ -1031,6 +1032,7 @@ class logfile:
                   "/"+cfp.eform(time_per_cell_per_step_stats[0],2)+") (min/max="+cfp.eform(time_per_cell_per_step.min(),2)+
                   "/"+cfp.eform(time_per_cell_per_step.max(),2)+") s", color='yellow')
         if plot:
+            if cfpack_plot_style: cfp.load_plot_style()
             x = np.array([steps[istep].n for istep in range(len(steps)-1)])
             y = np.array([steps[istep].time_per_cell_per_step for istep in range(len(steps)-1)])
             cfp.plot(x=x, y=y, xlabel=r'Time step \#', ylabel="Walltime per cell per step (s)", ylog=True, linewidth=0.5, show=True)
@@ -1038,6 +1040,7 @@ class logfile:
             po = cfp.get_pdf(time_per_cell_per_step, bins=bins)
             cfp.plot(x=po.bin_edges, y=po.pdf, type='pdf', xlabel="Walltime per cell per step (s)",
                      xlog=True, ylog=True, ylabel="PDF", linewidth=0.5, show=True)
+            if cfpack_plot_style: cfp.unload_plot_style()
         return steps, nsteps, time_per_cell_per_step_stats
 
 # === END class 'logfile' ===
