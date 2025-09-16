@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # written by Christoph Federrath and Bella Gerrard, 2020-2025
 
-from cfpack.defaults import print, stop
+from cfpack import print, stop
 import cfpack as cfp
 import numpy as np
 import argparse
