@@ -1,6 +1,15 @@
-# cfflash - tools for the Flash simulation code written by Christoph Federrath
+# cfflash - modules and tools for the Flash simulation code written by Christoph Federrath
 
-A collection of python and C++ tools for the simulation code FLASH.
+A collection of modules and python/C++ tools for the simulation code FLASH.
+
+The main directory contains python tools for visualisation and data analysis.
+
+Directory 'cpp_tools' contains C++ analysis tools (projection/slicing, Fourier analysis, structure functions, etc.)
+
+Directory 'flash_modules' contains the following Flash (v4.0) modules:
+- Sink particle main module (https://www.mso.anu.edu.au/~chfeder/pubs/sinks/sinks.html).
+- Sink particle jet/outflow module (https://www.mso.anu.edu.au/~chfeder/pubs/outflow_model/outflow_model.html)
+- Sink particle heating feedback module (https://ui.adsabs.harvard.edu/abs/2020MNRAS.496.5201M/abstract)
 
 ### Copyright notes ###
 
