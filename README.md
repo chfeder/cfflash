@@ -1,4 +1,4 @@
-# CFflash - modules and tools for the Flash simulation code written by Christoph Federrath
+# CFflash - modules and tools for the Flash astrophysics simulation code written by Christoph Federrath
 
 A collection of modules and python/C++ tools for the simulation code Flash (https://flash.rochester.edu/site/flashcode/).
 

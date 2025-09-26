@@ -1,4 +1,4 @@
-# C++ tools for the FLASH code #
+# C++ tools for the Flash astrophysics simulation code #
 
 These tools are developed and maintained by Christoph Federrath (christoph.federrath@anu.edu.au).
 
