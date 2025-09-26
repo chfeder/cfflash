@@ -1,0 +1,21 @@
+# Configuration file for the sink particle luminosity heating module
+# written by Christoph Federrath (2016-2020) and Sajay Mathew (2019-2020)
+#
+# Main references and code paper:
+#   Mathew & Federrath (2020, MNRAS 496, 5201)
+#   Federrath et al. (2017, JPCS 837, 012007)
+
+DEFAULT Polar
+
+REQUESTS Particles/ParticlesMain/Sink/StellarEvolution
+# REQUESTS physics/Eos/EosMain/Polytropic # or Isothermal or Polytropic, but Gamma EOS is not supported yet
+
+# To activate, set sink_heating_model = 1
+
+PARAMETER sink_heating_model    INTEGER  0          # 0: off, 1: on
+
+PARAMETER sink_heating_radius   REAL     1.496e+18  # heating radius (about 100,000 AU; see Offner et al. 2009)
+                                                    # heating is only applied out to this maximum radius
+
+# sink luminosity heating temperature (required by EOS to add to normal gas temperature and pressure)
+VARIABLE slht

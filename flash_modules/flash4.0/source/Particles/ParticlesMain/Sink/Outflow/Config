@@ -1,0 +1,48 @@
+# Configuration file for the sink particle outflow + jet module.
+# Written by Martin Schroen (2011-2012) and Christoph Federrath (2012-2014).
+#
+# See method paper for details:
+#   Federrath, Schroen, Banerjee, Klessen (2014, ApJ 790, 128).
+#
+# Example applications:
+#   Federrath (2015, MNRAS 450, 4035)
+#   Mathew & Federrath (2021, MNRAS 507, 2448)
+
+PPDEFINE SINKS_OUTFLOW
+
+# To activate, set outflow_mass_model = 1
+# All other parameters below are set to their (reasonable) defaults.
+
+PARAMETER outflow_mass_model       INTEGER  0         # 0: ALL off, 1: standard smoothing, 2: no smoothing
+
+PARAMETER outflow_radius           REAL     16.       # outflow radius in units of minimum cell size (16 cells are recommended)
+
+PARAMETER outflow_mass_fraction    REAL     0.3       # fraction of accreted mass that is reinjected
+                                                      # (outflow ~ 0.1, jet ~ 0.3; see Banerjee & Pudritz 2006)
+                                                      # see also Seifried et al. (2012) who find ~ 0.3
+                                                      # and many others find 0.3 (see paper)
+                                                      # set a number > 1 to specify a constant outflow rate, e.g. 1.0e28 [g/s]
+
+PARAMETER outflow_speed_model      REAL     1         # 1: outflow and jet velocities adapt to v_kepler, 0: const
+
+PARAMETER outflow_speed            REAL     100.e5    # velocity scale for the jet component (e5 = km/s)
+
+PARAMETER outflow_velocity_profile INTEGER  1         # 1: outflow+jet component, 0: const
+
+PARAMETER outflow_amom_model       INTEGER  1         # 1: standard angular momentum transfer, 0: off
+
+PARAMETER outflow_amom_fraction    REAL     0.9       # fraction of accreted angular momentum that is transferred back in the jet
+                                                      # For 50%, see e.g., simulations by Banerjee & Pudritz (2006, Fig.10)
+                                                      # For 60%-100%, see e.g., observations by Bacciotti et al. (2002)
+                                                      # For 50%-200%, see Hennebelle & Fromang (2008)
+
+PARAMETER outflow_time_model       INTEGER  1         # time evolution model of the outflowing mass
+                                                      # 1: smoothed start over outflow_time_char, 0: const
+
+PARAMETER outflow_time_char        REAL     -1.0      # characteristic time for the time model (<=0 sets it automatically)
+
+PARAMETER outflow_theta            REAL     30.       # opening angle from rotation axis in degrees (full angle alpha = 2*theta)
+
+MASS_SCALAR oadv                                      # advected outflow mass
+
+# VARIABLE outf                                         # mark cells in outflow launching volume around each sink (mostly for debugging)

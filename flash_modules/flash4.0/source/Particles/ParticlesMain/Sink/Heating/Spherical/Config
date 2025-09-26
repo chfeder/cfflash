@@ -1,0 +1,9 @@
+# Configuration file for the sink particle luminosity heating module (spherical implementation)
+# written by Christoph Federrath (2016)
+# Reference: Federrath et al. (2017, JPCS 837, 012007)
+
+PARAMETER sink_heating_luminosity_fraction  REAL     1.0        # fraction of accreted mass that goes into luminosity
+                                                                # (see Eq. 8 in Krumholz 2011; also McKee & Tan 2003)
+                                                                # default: 1.0, because outflow feedback is normally activated,
+                                                                # so no need to fake this here with a factor 0.75;
+                                                                # note that this factor is irrelevant if running stellar evolution

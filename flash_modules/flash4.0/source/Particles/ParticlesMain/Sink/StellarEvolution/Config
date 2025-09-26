@@ -1,0 +1,12 @@
+# Configuration file for the sink particle stellar evolution model
+# Written by Christoph Federrath (2016).
+# Adapted from Offner et al. (2009, ApJ 703, 131).
+
+D          sink_stellar_evolution  switch stellar evolution on/off
+PARAMETER  sink_stellar_evolution  BOOLEAN  TRUE
+
+# additional sink particle properties for stellar evolution
+PARTICLEPROP  luminosity        REAL
+PARTICLEPROP  burn_state        REAL
+PARTICLEPROP  deuterium_mass    REAL
+PARTICLEPROP  stellar_radius    REAL

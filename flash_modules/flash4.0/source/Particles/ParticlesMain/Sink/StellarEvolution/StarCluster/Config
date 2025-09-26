@@ -1,0 +1,20 @@
+# Configuration file for the sink particles that represent star clusters
+# Written by Shyam Harimohan Menon (2022).
+#
+# Main references:
+#   Menon et al. (2022, MNRAS 512, 401)
+#   Menon et al. (2022, MNRAS 517, 1313)
+#   Menon et al. (2023, MNRAS 521, 5160)
+
+D          cluster_lumpermass  Luminosity per unit mass of star cluster in FUV band. EUV value taken to be 40% of this (appropriate for stellar populations)  
+PARAMETER  cluster_lumpermass  REAL  1.7e3
+
+D          cluster_type        Flag for type of luminosity per-unit mass: 1 - constant value, 2 - SLUG fit from Kim et al. (2016)
+PARAMETER  cluster_type        INTEGER 1
+
+D          cluster_imffactor   Factor by which to multiply L/M to account for IMF variations at the high-mass end. Default = 1 (Salpeter)
+PARAMETER  cluster_imffactor   REAL  1.0
+
+# Sink particle properties: Luminosity of FUV photons and EUV photon rate
+PARTICLEPROP  LUMFUV   REAL
+PARTICLEPROP  EUVRATE  REAL

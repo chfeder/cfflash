@@ -1,0 +1,113 @@
+# Configuration file for the sink particle (star particle) module
+# Main references:
+#  Federrath et al. 2010, ApJ 713, 269 (https://ui.adsabs.harvard.edu/abs/2010ApJ...713..269F/abstract)
+#  Federrath et al. 2011, IAUS 270, 425 (https://ui.adsabs.harvard.edu/abs/2011IAUS..270..425F/abstract)
+#  Federrath et al. 2014, ApJ 790, 128 (https://ui.adsabs.harvard.edu/abs/2014ApJ...790..128F/abstract)
+
+REQUESTS physics/Gravity/GravityMain/Poisson
+REQUIRES IO/IOParticles
+
+USESETUPVARS Grid, nDim
+IF Grid=='UG'
+   REQUIRES Particles/ParticlesMain/Sink/UG
+ENDIF
+IF nDim != 3
+   SETUPERROR Sink particles only work in 3D.
+ENDIF
+
+# Define particle type:
+PARTICLETYPE sink INITMETHOD custom MAPMETHOD weighted ADVMETHOD leapfrog
+
+# Grid acceleration from sink particles onto gas
+# current accelerations
+VARIABLE sgax
+VARIABLE sgay
+VARIABLE sgaz
+# old accelerations
+VARIABLE sgxo
+VARIABLE sgyo
+VARIABLE sgzo
+
+# Refinement on sink particles (if on, all cells within the sink accretion radius are kept on the highest level of AMR)
+# It is recommended that sink particles are used together with Jeans refinement (refineOnJeansLength = .true.; see paramesh unit)
+PARAMETER refineOnSinkParticles  BOOLEAN  FALSE
+
+D useSinkParticles             switch sink particles on/off
+D sink_density_thresh_factor   density threshold for sink creation and accretion is set automatically based on the local Jeans length; can use this as extra factor
+D sink_accretion_radius        accretion radius (in number of cells at the highest level of AMR)
+D sink_softening_radius        gravitational softening radius (in number of cells at the highest level of AMR)
+D sink_softening_type_gas      gravitational softening gas--sinks
+D sink_softening_type_sinks    gravitational softening sinks--sinks
+D sink_integrator              time step integrator (euler, leapfrog, leapfrog_cosmo)
+D sink_subdt_factor            timestep safety factor for subcycling
+D sink_dt_factor               glocal timestep safety factor for sinks
+D sink_merging                 activate/deactivate sink particle merging
+D sink_maxSinks                maximum number of sink particles
+D sink_stop_on_creation        stop Flash by creating .dump_restart file when next sink particle is created
+D sink_stop_on_total_mass      stop Flash by creating .dump_restart file when sinks reach total mass of <sink_stop_on_total_mass>
+
+PARAMETER useSinkParticles            BOOLEAN  FALSE
+PARAMETER sink_density_thresh_factor  REAL     1.0
+PARAMETER sink_accretion_radius       REAL     2.5
+PARAMETER sink_softening_radius       REAL     2.5
+PARAMETER sink_softening_type_gas     STRING   "linear"    ["linear", "spline"]
+PARAMETER sink_softening_type_sinks   STRING   "spline"    ["linear", "spline"]
+PARAMETER sink_integrator             STRING   "leapfrog"  ["euler", "leapfrog", "leapfrog_cosmo"]
+PARAMETER sink_subdt_factor           REAL     0.01
+PARAMETER sink_dt_factor              REAL     0.5
+PARAMETER sink_merging                BOOLEAN  FALSE
+PARAMETER sink_maxSinks               INTEGER  1024
+PARAMETER sink_stop_on_creation       BOOLEAN  FALSE
+PARAMETER sink_stop_on_total_mass     REAL     1e99
+
+# parameters for Ewald correction in case of periodic gravity boundaries
+D sink_EwaldFieldNx                 number of x cells in Ewald correction field
+D sink_EwaldFieldNy                 number of y cells in Ewald correction field
+D sink_EwaldFieldNz                 number of z cells in Ewald correction field
+D sink_EwaldSeriesN                 Ewald series max integer n, h
+D sink_EwaldFileName                Filename for storing the Ewald field (used on restart)
+
+PARAMETER sink_EwaldFieldNx         INTEGER  64
+PARAMETER sink_EwaldFieldNy         INTEGER  64
+PARAMETER sink_EwaldFieldNz         INTEGER  64
+PARAMETER sink_EwaldSeriesN         INTEGER  5
+PARAMETER sink_EwaldFileName        STRING   "sink_ewald.txt"
+
+# those should all be true by default
+# (only change for debug purposes)
+PARAMETER sink_creationInfo         INTEGER 0     [0,1,2] # higher for more info
+PARAMETER sink_convergingFlowCheck  BOOLEAN TRUE
+PARAMETER sink_potentialMinCheck    BOOLEAN TRUE
+PARAMETER sink_JeansCheck           BOOLEAN TRUE
+PARAMETER sink_negativeEtotCheck    BOOLEAN TRUE
+PARAMETER sink_GasAccretionChecks   BOOLEAN TRUE
+
+# to optimize runtime, avoid communication, if sink number is small;
+# if number of sinks exceeds ~ 100, sink_AdvanceSerialComputation =.false. may improve performance
+D sink_AdvanceSerialComputation
+PARAMETER sink_AdvanceSerialComputation BOOLEAN TRUE
+
+# this switch allows sink particles to remain active beyond the boundaries of the
+# computational domain; particles normally disappear when they move off the domain,
+# but if the user activates this switch, sinks remain active including their
+# gravitational interactions with the gas on the grid and with one another.
+PARAMETER sink_offDomainSupport     BOOLEAN FALSE
+
+# sink particle properties
+PARTICLEPROP accx           REAL       # x-acceleration
+PARTICLEPROP accy           REAL       # y-acceleration
+PARTICLEPROP accz           REAL       # z-acceleration
+PARTICLEPROP oacx           REAL       # x-acceleration (previous timestep)
+PARTICLEPROP oacy           REAL       # y-acceleration (previous timestep)
+PARTICLEPROP oacz           REAL       # z-acceleration (previous timestep)
+PARTICLEPROP mass           REAL       # particle mass
+PARTICLEPROP old_pmass      REAL       # particle mass (previous timestep)
+PARTICLEPROP x_ang          REAL       # x spin
+PARTICLEPROP y_ang          REAL       # y spin
+PARTICLEPROP z_ang          REAL       # z spin
+PARTICLEPROP x_ang_old      REAL       # x spin (previous timestep)
+PARTICLEPROP y_ang_old      REAL       # y spin (previous timestep)
+PARTICLEPROP z_ang_old      REAL       # z spin (previous timestep)
+PARTICLEPROP accr_rate      REAL       # accretion rate
+PARTICLEPROP creation_time  REAL       # time of formation
+PARTICLEPROP dtold          REAL       # previous timestep
