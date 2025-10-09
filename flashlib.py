@@ -1169,13 +1169,20 @@ def get_min(flash_file, dset):
     hdf = h5py.File(flash_file, "r")
     minimum = hdf[dset].attrs["minimum"]
     hdf.close()
-    return float(minimum)
+    n = len(minimum)
+    if n > 1:
+        print("Found "+str(n)+" minima; picking one of them...", warn=1)
+    return float(minimum.min())
+
 # ================= get_max ==================
 def get_max(flash_file, dset):
     hdf = h5py.File(flash_file, "r")
     maximum = hdf[dset].attrs["maximum"]
     hdf.close()
-    return float(maximum)
+    n = len(maximum)
+    if n > 1:
+        print("Found "+str(n)+" maxima; picking one of them...", warn=1)
+    return float(maximum.max())
 
 # ================= get_time ==================
 def get_time(flash_file):
