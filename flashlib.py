@@ -655,6 +655,10 @@ class Particles:
     def read(self, dsets=["posx", "posy", "posz"], type=None, box_bounds=None):
         from builtins import type as type_bi
         if self.n == 0: return None # return if we don't have any particles
+        if type_bi(dsets) != list: dsets = [dsets] # if user only supplies a single dset, turn into list of 1 element for internal processing
+        for dset in dsets:
+            if dset not in self.dsets:
+                print("requested dataset '"+dset+"' not in '"+self.filename+"'. Available datasets: ", self.dsets, error=True)
         # if user wants a specific type, we first check whether the type is actually present
         if type is not None:
             error = False
@@ -663,8 +667,11 @@ class Particles:
             elif type != 1: error = True # user requested a non-existent type
             if error:
                 print("Particle type "+str(type)+" not in file (available types are", self.types, ").", error=True)
-            type_arr = self.read("type", box_bounds=box_bounds)
-            type_ind = type_arr == type # get the indices matching the type
+            if "type" in self.dsets:
+                type_arr = self.read("type", box_bounds=box_bounds)
+                type_ind = type_arr == type # get the indices matching the type
+            else:
+                type_ind = slice(None)
         if box_bounds is not None:
             box_bounds = np.array(box_bounds) # turn into numpy array
             pos = self.read(['posx', 'posy', 'posz'], type=type) # read particle positions
@@ -673,7 +680,6 @@ class Particles:
                 bb_ind = np.logical_and(bb_ind, np.logical_and(pos[dir,:] >= box_bounds[dir,0], pos[dir,:] <= box_bounds[dir,1]))
         if type is not None and box_bounds is not None:
             combined_ind = type_ind & bb_ind
-        if type_bi(dsets) != list: dsets = [dsets] # if user only supplies a single dset, turn into list of 1 element for internal processing
         data = []
         for dset in dsets:
             index = self.dsets.index(dset) # find requested particle dataset index
