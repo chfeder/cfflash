@@ -187,7 +187,7 @@ class flashplotlib:
                 dens = hdfio.read(filename[2], datasetname[2])
                 map_var = oadv * dens
                 self.datasetname = 'derived_oadv'
-                self.filename = filename[-1] # pass the last one
+            self.filename = filename[-1] # pass the last one
         else:
             map_var = hdfio.read(filename, datasetname)
             self.filename = filename
@@ -382,9 +382,12 @@ class flashplotlib:
             # divergence of velocity
             if self.datasetname.find('divv') != -1:
                 self.cmap_label = r'$\nabla\cdot\mathbf{v}$ $\left(\mathrm{s}^{-1}\right)$'
-            # derived:oadv
+            # derived:oadv (outflow tracer)
             if self.datasetname.find('outflow_dens') == 0 or self.datasetname.find('derived_oadv') == 0:
                 self.cmap_label = r'$\mathrm{outflow\;gas\;density}$ $\left(\mathrm{g}\,\mathrm{cm}^{-3}\right)$'
+            # cs (sound speed)
+            if self.datasetname.find('cs') == 0:
+                self.cmap_label = r'$c_\mathrm{s}$ $\left(\mathrm{cm\,s^{-1}}\right)$'
             # oadv
             if self.datasetname.find('oadv') == 0:
                 self.cmap_label = r'$\mathrm{outflow\;tracer}$'
@@ -1624,12 +1627,12 @@ def process_file(filen, args):
             gg = fl.FlashGG(filen)
             if args.boundary is None: args.boundary = gg.BoundaryType
 
-            if args.show_blocks or args.show_grid:
-                nb = gg.NB
-                if args.boundary == "periodic": gg.AddBlockReplicasPBCs()
-                bb = gg.BoundingBox[gg.NodeType==1] # limit to leaf blocks
-                rl = gg.RefineLevel[gg.NodeType==1] # limit to leaf blocks
-                if args.verbose: print("Maximum refinement level = "+str(rl.max()))
+            # get block properties (number of cells, bounding box, refinement level)
+            nb = gg.NB
+            if args.boundary == "periodic": gg.AddBlockReplicasPBCs()
+            bb = gg.BoundingBox[gg.NodeType==1] # limit to leaf blocks
+            rl = gg.RefineLevel[gg.NodeType==1] # limit to leaf blocks
+            if args.verbose: print("Maximum refinement level = "+str(rl.max()))
 
             # handle centre_on_maxdens keyword
             if args.centre_on is not None:
@@ -1801,12 +1804,11 @@ def process_file(filen, args):
     fpl.stream_var = args.stream_var
     fpl.convert2proper = args.convert2proper
     fpl.show_redshift = args.show_redshift
-    if args.show_blocks or args.show_grid:
-        fpl.nb = nb # number of cells per block
-        fpl.bb = bb # block bounding boxes
-        fpl.rl = rl # block refinement level
-        if args.show_blocks: fpl.show_blocks = args.show_blocks
-        if args.show_grid: fpl.show_grid = args.show_grid
+    fpl.nb = nb # number of cells per block
+    fpl.bb = bb # block bounding boxes
+    fpl.rl = rl # block refinement level
+    if args.show_blocks: fpl.show_blocks = args.show_blocks
+    if args.show_grid: fpl.show_grid = args.show_grid
     if args.nolog: fpl.log = False
     if args.lowres: args.dpi = 100
     # if dpi is None, we set dpi based on pixels, such that if map_only, we get exactly the pixel resolution
