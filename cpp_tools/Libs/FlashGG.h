@@ -597,6 +597,17 @@ class FlashGG
                                                               / (4.0*NameSpaceFlashGG::pi*(double)data[0][n]) );
                 }
             }
+            else if (datasetname == "cs") { // === sound speed (from pres and dens) ===
+                if (ntot == 0) { // initial call to get required datset(s)
+                    ret.push_back("pres"); // data[0]
+                    ret.push_back("dens"); // data[1]
+                } else { // compute derived dataset and return in data[0]
+                    std::map<std::string, double> real_params = this->ReadRealParameters();
+                    double gamma = real_params.at("gamma");
+                    for (int n=0; n<ntot; n++)
+                        data[0][n] = (FLASH_GG_REAL) sqrt( gamma*(double)data[0][n]/(double)data[1][n] );
+                }
+            }
             else if (datasetname == "machalf") { // === Alfven Mach number ===
                 if (ntot == 0) { // initial call to get required datset(s)
                     ret.push_back("dens"); // data[0]
