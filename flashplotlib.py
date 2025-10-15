@@ -388,6 +388,9 @@ class flashplotlib:
             # cs (sound speed)
             if self.datasetname.find('cs') == 0:
                 self.cmap_label = r'$c_\mathrm{s}$ $\left(\mathrm{cm\,s^{-1}}\right)$'
+            # jnum (Jeans number)
+            if self.datasetname.find('jnum') == 0:
+                self.cmap_label = r'$\mathrm{Jeans\;number}$'
             # oadv
             if self.datasetname.find('oadv') == 0:
                 self.cmap_label = r'$\mathrm{outflow\;tracer}$'
