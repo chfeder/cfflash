@@ -44,8 +44,9 @@
 namespace NameSpaceFlashGG {
     // constants
     static const double pi = 3.14159265358979323846;
-    static const double k_b = 1.380649e-16;
-    static const double m_p = 1.67262192369e-24;
+    static const double k_b = 1.380649e-16; // Boltzmann constant
+    static const double m_p = 1.67262192369e-24; // proton mass
+    static const double g_n = 6.6743e-8; // gravitational constant
     static const double mean_particle_weight = 2.3;
 }
 
@@ -556,7 +557,8 @@ class FlashGG
     public: std::vector< std::vector <std::vector<double> > > GetBoundingBox_PB(void) { return BoundingBox_PB; };
 
     /// private helper function that computes derived variables for all block reading functions below
-    private: std::vector<std::string> DerivedVar(const std::string datasetname, const long ntot, std::vector<FLASH_GG_REAL*> &data)
+    private: std::vector<std::string> DerivedVar(const int block, const std::string datasetname,
+                                                 const long ntot, std::vector<FLASH_GG_REAL*> &data)
     {
         if (Verbose>1 && MyPE==0) std::cout<<FuncSig(__func__)<<"entering..."<<std::endl;
         std::vector<std::string> ret; // returns required dataset names for computing derived variable
@@ -606,6 +608,20 @@ class FlashGG
                     double gamma = real_params.at("gamma");
                     for (int n=0; n<ntot; n++)
                         data[0][n] = (FLASH_GG_REAL) sqrt( gamma*(double)data[0][n]/(double)data[1][n] );
+                }
+            }
+            else if (datasetname == "jnum") { // === Jeans number (from pres and dens) ===
+                if (ntot == 0) { // initial call to get required datset(s)
+                    ret.push_back("pres"); // data[0]
+                    ret.push_back("dens"); // data[1]
+                } else { // compute derived dataset and return in data[0]
+                    std::map<std::string, double> real_params = this->ReadRealParameters();
+                    double gamma = real_params.at("gamma");
+                    double jeans_num_pre_factor = sqrt(NameSpaceFlashGG::pi / NameSpaceFlashGG::g_n) /
+                                                    std::max(D[block][X], std::max(D[block][Y], D[block][Z]));
+                    for (int n=0; n<ntot; n++)
+                        data[0][n] = (FLASH_GG_REAL) jeans_num_pre_factor *
+                            sqrt( gamma*(double)data[0][n]/(double)data[1][n]/(double)data[1][n]);
                 }
             }
             else if (datasetname == "machalf") { // === Alfven Mach number ===
@@ -863,11 +879,11 @@ class FlashGG
         long ntot = 0; // total number of cells in dataset (set to 0 in first call to DerivedVar)
         std::vector<FLASH_GG_REAL*> data; // required data pointers for derived dataset (empty in first call to DerivedVar)
          // get requested dataset names for computing derived dataset (if not a derived dataset, it returns datasetname)
-        std::vector<std::string> req_dset_names = DerivedVar(datasetname, ntot, data);
+        std::vector<std::string> req_dset_names = DerivedVar(block, datasetname, ntot, data);
         for (unsigned int d = 0; d < req_dset_names.size(); d++) { // read required data pointers for derived dataset
             data.push_back(ReadBlockVar_Direct(block, req_dset_names[d], ntot));
         }
-        DerivedVar(datasetname, ntot, data); // compute derived dataset for return, located in data[0]
+        DerivedVar(block, datasetname, ntot, data); // compute derived dataset for return, located in data[0]
         for (unsigned int d = 1; d < req_dset_names.size(); d++) delete [] data[d]; // clean up rest of data
         return data[0];
     };
@@ -912,11 +928,11 @@ class FlashGG
         long ntot = 0; // total number of cells in dataset (set to 0 in first call to DerivedVar)
         std::vector<FLASH_GG_REAL*> data; // required data pointers for derived dataset (empty in first call to DerivedVar)
          // get requested dataset names for computing derived dataset (if not a derived dataset, it returns datasetname)
-        std::vector<std::string> req_dset_names = DerivedVar(datasetname, ntot, data);
+        std::vector<std::string> req_dset_names = DerivedVar(block, datasetname, ntot, data);
         for (unsigned int d = 0; d < req_dset_names.size(); d++) { // read required data pointers for derived dataset
             data.push_back(ReadBlockVarGC_Direct(block, req_dset_names[d], ngc, mass_weighting, periodic_boundary_conditions, ntot));
         }
-        DerivedVar(datasetname, ntot, data); // compute derived dataset for return, located in data[0]
+        DerivedVar(block, datasetname, ntot, data); // compute derived dataset for return, located in data[0]
         for (unsigned int d = 1; d < req_dset_names.size(); d++) delete [] data[d]; // clean up rest of data
         return data[0];
     };
@@ -1013,11 +1029,11 @@ class FlashGG
         long ntot = 0; // total number of cells in dataset (set to 0 in first call to DerivedVar)
         std::vector<FLASH_GG_REAL*> data; // required data pointers for derived dataset (empty in first call to DerivedVar)
          // get requested dataset names for computing derived dataset (if not a derived dataset, it returns datasetname)
-        std::vector<std::string> req_dset_names = DerivedVar(datasetname, ntot, data);
+        std::vector<std::string> req_dset_names = DerivedVar(block_pb, datasetname, ntot, data);
         for (unsigned int d = 0; d < req_dset_names.size(); d++) { // read required data pointers for derived dataset
             data.push_back(ReadBlockVarPB_Direct(block_pb, req_dset_names[d], ntot));
         }
-        DerivedVar(datasetname, ntot, data); // compute derived dataset for return, located in data[0]
+        DerivedVar(block_pb, datasetname, ntot, data); // compute derived dataset for return, located in data[0]
         for (unsigned int d = 1; d < req_dset_names.size(); d++) delete [] data[d]; // clean up rest of data
         return data[0];
     };
