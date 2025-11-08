@@ -9,6 +9,11 @@
 
 */
 
+// The default is to use single precision arithmetic.
+// For double precision, set the following to double and H5T_NATIVE_DOUBLE.
+#define FLASH_GG_REAL float
+#define FLASH_GG_H5_REAL H5T_NATIVE_FLOAT
+
 #include "mpi.h" /// MPI lib
 #include <iostream>
 #include <sstream>
@@ -425,10 +430,10 @@ int main(int argc, char * argv[])
             if (periodic_boundary_conditions) b = b_all % NumBlocks; // take care of PBCs (if present)
 
             /// read block data
-            float *block_data = 0;
-            float *block_data_x = 0;
-            float *block_data_y = 0;
-            float *block_data_z = 0;
+            FLASH_GG_REAL *block_data = 0;
+            FLASH_GG_REAL *block_data_x = 0;
+            FLASH_GG_REAL *block_data_y = 0;
+            FLASH_GG_REAL *block_data_z = 0;
             if (!moment_maps) { // standard mode
                 if (rotation_angle_set || fullrotation_set) { // check if we need to rotate a vector quantity
                     if (datasetname == "velx" || datasetname == "vely" || datasetname == "velz") {
@@ -451,7 +456,7 @@ int main(int argc, char * argv[])
                 if (view == "xz") block_data = gg.ReadBlockVar(b, "vely");
                 if (view == "yz") block_data = gg.ReadBlockVar(b, "velx");
             }
-            float *block_dens = 0;
+            FLASH_GG_REAL *block_dens = 0;
             if (density_weight || moment_maps) block_dens = gg.ReadBlockVar(b, dens_name);
 
             /// prep for loop over cells in that block
