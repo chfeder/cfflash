@@ -1850,6 +1850,12 @@ class FlashGG
           L[dim] = MinMaxDomain[dim][1]-MinMaxDomain[dim][0];
           NumBlocksIn[dim] = (int)(L[dim]/LBlock[0][dim]+0.1); // blocks have same size in UG
           N[dim] = (int)(L[dim]/Dmin[dim]+0.1); // effective maximum resolution
+          if (N[dim] > 1e6 && MyPE==0) {
+            std::cout<<ClassSignature+"WARNING: maximum effective resolution N["<<dim<<"] > 1e6; "<<
+                "consider setting (before including FlashGG.h):"<<std::endl;
+            std::cout<<"#define FLASH_GG_REAL double"<<std::endl;
+            std::cout<<"#define FLASH_GG_H5_REAL H5T_NATIVE_DOUBLE"<<std::endl;
+          }
         }
         delete [] BoundingBoxPointer;
     };
