@@ -428,13 +428,16 @@ void ComputeTerm(const string term, std::vector<float*>& output, std::vector<flo
             GetIndices(i, j, k, NB, NBGC, NGC, index, index_gc, il, ir); /// get indices
             // B_y J_z - B_z J_y
             // v_y B_z - v_z B_y
-            output[0][index] = input[1][index]*input[5][index] - input[2][index]*input[4][index];
+            output[0][index] =  (double)input[1][index_gc]*(double)input[5][index_gc] -
+                                (double)input[2][index_gc]*(double)input[4][index_gc];
             // B_z J_x - B_x J_z
             // v_z B_x - v_x B_z
-            output[1][index] = input[2][index]*input[3][index] - input[0][index]*input[5][index];
+            output[1][index] =  (double)input[2][index_gc]*(double)input[3][index_gc] -
+                                (double)input[0][index_gc]*(double)input[5][index_gc];
             // B_x J_y - B_y J_x
             // v_x B_y - v_y B_x
-            output[2][index] = input[0][index]*input[4][index] - input[1][index]*input[3][index];
+            output[2][index] =  (double)input[0][index_gc]*(double)input[4][index_gc] -
+                                (double)input[1][index_gc]*(double)input[3][index_gc];
         }
     }
 
@@ -444,7 +447,9 @@ void ComputeTerm(const string term, std::vector<float*>& output, std::vector<flo
         for (int k=0; k<NB[Z]; k++) for (int j=0; j<NB[Y]; j++) for (int i=0; i<NB[X]; i++) {
             GetIndices(i, j, k, NB, NBGC, NGC, index, index_gc, il, ir); /// get indices
             // B_x J_x + B_y J_y + B_z J_z
-            output[0][index] = input[0][index]*input[3][index] + input[1][index]*input[4][index] + input[2][index]*input[5][index];
+            output[0][index] =  (double)input[0][index_gc]*(double)input[3][index_gc] +
+                                (double)input[1][index_gc]*(double)input[4][index_gc] +
+                                (double)input[2][index_gc]*(double)input[5][index_gc];
         }
     }
 
@@ -454,17 +459,17 @@ void ComputeTerm(const string term, std::vector<float*>& output, std::vector<flo
         for (int k=0; k<NB[Z]; k++) for (int j=0; j<NB[Y]; j++) for (int i=0; i<NB[X]; i++) {
             GetIndices(i, j, k, NB, NBGC, NGC, index, index_gc, il, ir); /// get indices
             // B_x \partial_x B_x + B_y \partial_y B_x + B_z \partial_z B_x
-            output[0][index] = input[0][index] * ((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] +
-                               input[1][index] * ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] +
-                               input[2][index] * ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z];
+            output[0][index] =  (double)input[0][index_gc] * ((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] +
+                                (double)input[1][index_gc] * ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] +
+                                (double)input[2][index_gc] * ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z];
             // B_x \partial_x B_y + B_y \partial_y B_y + B_z \partial_z B_y
-            output[1][index] = input[0][index] * ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] +
-                               input[1][index] * ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] +
-                               input[2][index] * ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z];
+            output[1][index] =  (double)input[0][index_gc] * ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] +
+                                (double)input[1][index_gc] * ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] +
+                                (double)input[2][index_gc] * ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z];
             // B_x \partial_x B_z + B_y \partial_y B_z + B_z \partial_z B_z
-            output[2][index] = input[0][index] * ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] +
-                               input[1][index] * ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] +
-                               input[2][index] * ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z];
+            output[2][index] =  (double)input[0][index_gc] * ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] +
+                                (double)input[1][index_gc] * ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] +
+                                (double)input[2][index_gc] * ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z];
         }
     }
 
@@ -472,90 +477,84 @@ void ComputeTerm(const string term, std::vector<float*>& output, std::vector<flo
         /*
             This function computes the viscous dissipation rate based on Offner et al. (2009).
             The model is:
-                \dot{e}_{diss} = - (\sigma \cdot \nabla) \cdot v,
+                \dot{e}_{diss} = - \mu (\sigma \cdot \nabla) \cdot v with units of g/cm/s^3,
             where \sigma is the viscous stress tensor,
                 \sigma = \nu ( S - 2/3 I \nabla \cdot v),
             and v is the velocity. S is the strain-rate tensor,
                 S = \nabla v - ( \nabla v )^T.
             The dynamic viscosity is given by
-                \nu = \rho |v| \delta_x / Re_g,
+                \mu = \rho |v| \delta_x / Re_g,
             where delta_x is the grid differential and Re_g ~ 1 is the Reynolds number at
             the grid scale. The largest uncertainty is in the Re_g.
-            To compute \nu we assume that on the grid scale the Reynolds number is approximately 1, which is the only
+            To compute \mu we assume that on the grid scale the Reynolds number is approximately 1, which is the only
             assumption for this model. Clearly this is not universally true, but regardless, this only scales the
             dissipation rate by a proportionality factor, hence the overall dissipation structure is correct.
         */
 
         double dx = D[X]; // the differential in x for the \nu calculation
-        double RE_g = 1; // use Re_g ~ 1 for the \nu calculation
+        double Re_g = 1.0; // use Re_g ~ 1 for the \nu calculation
 
-        // initialise the viscous stress tensor components (rank 2 tensor)
-        float *sigma_xx = new float[NB[X]*NB[Y]*NB[Z]];
-        float *sigma_xy = new float[NB[X]*NB[Y]*NB[Z]];
-        float *sigma_xz = new float[NB[X]*NB[Y]*NB[Z]];
-
-        float *sigma_yx = new float[NB[X]*NB[Y]*NB[Z]];
-        float *sigma_yy = new float[NB[X]*NB[Y]*NB[Z]];
-        float *sigma_yz = new float[NB[X]*NB[Y]*NB[Z]];
-
-        float *sigma_zx = new float[NB[X]*NB[Y]*NB[Z]];
-        float *sigma_zy = new float[NB[X]*NB[Y]*NB[Z]];
-        float *sigma_zz = new float[NB[X]*NB[Y]*NB[Z]];
+        // viscous stress tensor components (rank 2 tensor)
+        double sigma_xx, sigma_xy, sigma_xz;
+        double sigma_yx, sigma_yy, sigma_yz;
+        double sigma_zx, sigma_zy, sigma_zz;
 
         for (int k=0; k<NB[Z]; k++) for (int j=0; j<NB[Y]; j++) for (int i=0; i<NB[X]; i++) {
             GetIndices(i, j, k, NB, NBGC, NGC, index, index_gc, il, ir); /// get indices
 
-            // first construct nu
-            double vel_mag = pow( pow(input[0][index],2.0) + pow(input[1][index],2.0) + pow(input[2][index],2.0), 0.5);
-            double nu = input[3][index] * vel_mag * dx / RE_g;
+            // first construct mu
+            double vel_mag = sqrt( (double)input[0][index_gc]*(double)input[0][index_gc] +
+                                   (double)input[1][index_gc]*(double)input[1][index_gc] +
+                                   (double)input[2][index_gc]*(double)input[2][index_gc] );
+            double mu = (double)input[3][index_gc] * vel_mag * dx / Re_g;
 
             // x components
-            // sigma_xx = - nu 2/3 div(v)
-            sigma_xx[index] = -nu * (2.0/3.0) * (((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] +
-                                                 ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] +
-                                                 ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z]);
-            // sigma_xy = nu(\partial_y v_x - \partial_x v_y)
-            sigma_xy[index] = nu * (((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] -
-                                    ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X]);
-            // sigma_xz = nu(\partial_z v_x - \partial_x v_z)
-            sigma_xz[index] = nu * (((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z] -
-                                    ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X]);
+            // sigma_xx = - mu 2/3 div(v)
+            sigma_xx = -2.0/3.0 * ( ((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] +
+                                    ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] +
+                                    ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z]);
+            // sigma_xy = mu(\partial_y v_x - \partial_x v_y)
+            sigma_xy =  ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] -
+                        ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X];
+            // sigma_xz = mu(\partial_z v_x - \partial_x v_z)
+            sigma_xz =  ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z] -
+                        ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X];
 
             // y components
-            // sigma_yx = nu(\partial_x v_y - \partial_y v_x)
-            sigma_yx[index] = nu * (((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] -
-                                    ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y]);
-            // sigma_yy = - nu 2/3 div(v)
-            sigma_yy[index] = sigma_xx[index];
-            // sigma_yz = nu(\partial_z v_y - \partial_y v_z)
-            sigma_yz[index] = nu * (((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z] -
-                                    ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y]);
+            // sigma_yx = mu(\partial_x v_y - \partial_y v_x)
+            sigma_yx =  ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] -
+                        ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y];
+            // sigma_yy = - mu 2/3 div(v)
+            sigma_yy = sigma_xx;
+            // sigma_yz = mu(\partial_z v_y - \partial_y v_z)
+            sigma_yz =  ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z] -
+                        ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y];
 
             // z components
-            // sigma_zx = nu(\partial_x v_z - \partial_z v_x)
-            sigma_zx[index] = nu * (((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] -
-                                    ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z]);
-            // sigma_zy = nu(\partial_y v_z - \partial_z v_y)
-            sigma_zy[index] = nu * (((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] -
-                                    ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z]);
-
-            // sigma_zz = - nu 2/3 div(v)
-            sigma_zz[index] = sigma_xx[index];
+            // sigma_zx = mu(\partial_x v_z - \partial_z v_x)
+            sigma_zx =  ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] -
+                        ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z];
+            // sigma_zy = mu(\partial_y v_z - \partial_z v_y)
+            sigma_zy =  ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] -
+                        ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z];
+            // sigma_zz = - mu 2/3 div(v)
+            sigma_zz = sigma_xx;
 
             /*
-                \dot{e}_viscous = sigma_ij partial_j v_i = -([sigma_xx partial_x v_x + sigma_yx partial_x v_y + sigma_zx partial_x v_z] +
-                                                             [sigma_xy partial_y v_x + sigma_yy partial_y v_y + sigma_zy partial_y v_z] +
-                                                             [sigma_xz partial_z v_x + sigma_yz partial_z v_y + sigma_zz partial_z v_z])
+                \dot{e}_viscous = sigma_ij partial_j v_i =
+                    -(  [sigma_xx partial_x v_x + sigma_yx partial_x v_y + sigma_zx partial_x v_z] +
+                        [sigma_xy partial_y v_x + sigma_yy partial_y v_y + sigma_zy partial_y v_z] +
+                        [sigma_xz partial_z v_x + sigma_yz partial_z v_y + sigma_zz partial_z v_z]  )
             */
-            output[0][index] = -( ( sigma_xx[index] * ( ((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] ) +
-                               sigma_yx[index] * ( ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] ) +
-                               sigma_zx[index] * ( ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] ) ) +
-                             ( sigma_xy[index] * ( ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] ) +
-                               sigma_yy[index] * ( ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] ) +
-                               sigma_zy[index] * ( ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] ) ) +
-                             ( sigma_xz[index] * ( ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z] ) +
-                               sigma_yz[index] * ( ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z] ) +
-                               sigma_zz[index] * ( ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z] ) ) );
+            output[0][index] = -mu *( ( sigma_xx * ( ((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] ) +
+                                        sigma_yx * ( ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] ) +
+                                        sigma_zx * ( ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] ) ) +
+                                      ( sigma_xy * ( ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] ) +
+                                        sigma_yy * ( ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] ) +
+                                        sigma_zy * ( ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] ) ) +
+                                      ( sigma_xz * ( ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z] ) +
+                                        sigma_yz * ( ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z] ) +
+                                        sigma_zz * ( ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z] ) ) );
 
         } // loop over cells
     }
