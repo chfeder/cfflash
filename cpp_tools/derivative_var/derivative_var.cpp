@@ -39,7 +39,7 @@ bool compute_current = false;
 bool compute_mag_from_vecpot = false;
 bool compute_MHD_scales = false;
 bool compute_induction = false;
-bool compute_dissipation = false;
+double compute_dissipation_with_nu = -1.0;
 bool compute_enstrophy_sources = false;
 bool compute_grav_accel = false;
 bool mw = true; // default is mass-weighted interpolation to get guard cell info (only relevant for AMR)
@@ -233,8 +233,9 @@ int main(int argc, char * argv[])
                          NB, NGC, NBGC, D, gg, dsetnames_for_extending_unknown_names);
         }
 
-        /// compute viscous dissipation rate (assuming a viscosity that Re=1 on the scale of one grid-cell length)
-        if (compute_dissipation) {
+        /// compute viscous dissipation rate
+        /// Either user supplies kinematic viscosity nu or nu is estimated by assuming that Re=1 on one grid-cell length.
+        if (compute_dissipation_with_nu >= 0.0) {
             const int ndo = 1; string dno[ndo] = {"diss_rate"}; // output
             const int ndi = 4; string dni[ndi] = {"velx", "vely", "velz", "dens"}; // input
             ProcessBlock("DissipationRate", ib, b, ndo, ndi, dno, dni, Dimensions,
@@ -492,21 +493,29 @@ void ComputeTerm(const string term, std::vector<float*>& output, std::vector<flo
         */
 
         double dx = D[X]; // the differential in x for the \nu calculation
-        double Re_g = 1.0; // use Re_g ~ 1 for the \nu calculation
 
         // viscous stress tensor components (rank 2 tensor)
         double sigma_xx, sigma_xy, sigma_xz;
         double sigma_yx, sigma_yy, sigma_yz;
         double sigma_zx, sigma_zy, sigma_zz;
 
+        // kinematic viscosity
+        double nu = compute_dissipation_with_nu;
+
+        const double Re_g = 1.0; // use Re_g ~ 1 for the \nu calculation in case user did not set it
+
         for (int k=0; k<NB[Z]; k++) for (int j=0; j<NB[Y]; j++) for (int i=0; i<NB[X]; i++) {
             GetIndices(i, j, k, NB, NBGC, NGC, index, index_gc, il, ir); /// get indices
 
-            // first construct mu
-            double vel_mag = sqrt( (double)input[0][index_gc]*(double)input[0][index_gc] +
-                                   (double)input[1][index_gc]*(double)input[1][index_gc] +
-                                   (double)input[2][index_gc]*(double)input[2][index_gc] );
-            double mu = (double)input[3][index_gc] * vel_mag * dx / Re_g;
+            if (nu == 0.0) { // user did not specify \nu -> estimate \nu locally
+                double vel_mag = sqrt( (double)input[0][index_gc]*(double)input[0][index_gc] +
+                                    (double)input[1][index_gc]*(double)input[1][index_gc] +
+                                    (double)input[2][index_gc]*(double)input[2][index_gc] );
+                nu = vel_mag * dx / Re_g; // kinematic viscosity estimate
+            }
+
+            // dynamic viscosity: mu = rho * nu
+            double mu = (double)input[3][index_gc] * nu;
 
             // x components
             // sigma_xx = - mu 2/3 div(v)
@@ -652,7 +661,7 @@ int ParseInputs(const vector<string> Argument)
     valid_options.push_back("-current");
     valid_options.push_back("-MHD_scales");
     valid_options.push_back("-induction");
-    valid_options.push_back("-dissipation");
+    valid_options.push_back("-dissipation_with_nu");
     valid_options.push_back("-enstrophy_sources");
     valid_options.push_back("-grav_accel");
     valid_options.push_back("-non-periodic");
@@ -692,7 +701,13 @@ int ParseInputs(const vector<string> Argument)
         if (Argument[i] != "" && Argument[i] == "-mag_from_vecpot") compute_mag_from_vecpot = true;
         if (Argument[i] != "" && Argument[i] == "-MHD_scales") compute_MHD_scales = true;
         if (Argument[i] != "" && Argument[i] == "-induction") compute_induction = true;
-        if (Argument[i] != "" && Argument[i] == "-dissipation") compute_dissipation = true;
+        if (Argument[i] != "" && Argument[i] == "-dissipation_with_nu")
+        {
+            if (Argument.size()>i+1) {
+                dummystream << Argument[i+1]; dummystream >> compute_dissipation_with_nu; dummystream.clear();
+            } else compute_dissipation_with_nu = 0.0;
+            if (Verbose && MyPE==0) cout << "Computing dissipation rate with nu = " << compute_dissipation_with_nu << endl;
+        }
         if (Argument[i] != "" && Argument[i] == "-enstrophy_sources") compute_enstrophy_sources = true;
         if (Argument[i] != "" && Argument[i] == "-grav_accel") compute_grav_accel = true;
         if (Argument[i] != "" && Argument[i] == "-non-periodic") pbc = false;
@@ -713,8 +728,8 @@ int ParseInputs(const vector<string> Argument)
         cout << endl;
     }
 
-    if (!compute_divv && !compute_divb && !compute_vort && !compute_divrhov && !compute_current && !compute_mag_from_vecpot && !compute_MHD_scales && !compute_induction && !compute_dissipation && !compute_enstrophy_sources && !compute_grav_accel) {
-        if (MyPE==0) cout << endl << "Need to specify at least one of '-divv', '-divb', '-vort', '-divrhov', '-current', '-mag_from_vecpot', '-MHD_scales', '-induction', '-dissipation', '-enstrophy_sources, '-compute_grav_accel'. Exiting." << endl;
+    if (!compute_divv && !compute_divb && !compute_vort && !compute_divrhov && !compute_current && !compute_mag_from_vecpot && !compute_MHD_scales && !compute_induction && (compute_dissipation_with_nu < 0.0) && !compute_enstrophy_sources && !compute_grav_accel) {
+        if (MyPE==0) cout << endl << "Need to specify at least one of '-divv', '-divb', '-vort', '-divrhov', '-current', '-mag_from_vecpot', '-MHD_scales', '-induction', '-dissipation_with_nu', '-enstrophy_sources, '-compute_grav_accel'. Exiting." << endl;
         return -1;
     }
 
@@ -732,21 +747,22 @@ void HelpMe(void)
         cout << endl
             << "Syntax:" << endl
             << " derivative_var <filename> [<OPTIONS>]" << endl << endl
-            << "   <OPTIONS>:           " << endl
-            << "     -divv              : compute divergence of velocity" << endl
-            << "     -divb              : compute divergence of magnetic field" << endl
-            << "     -vort              : compute vorticity components" << endl
-            << "     -divrhov           : compute divergence of momentum density (rho*v)" << endl
-            << "     -current           : compute current components (J = curl of B)" << endl
-            << "     -mag_from_vecpot   : compute magnetic field components from vector potential (B = curl of A)" << endl
-            << "     -MHD_scales        : compute BxJ, B.J and the magnetic tension" << endl
-            << "     -induction         : compute curl(v x B), the induction term" << endl
-            << "     -dissipation       : compute the viscous dissipation rate (assumes Re=1 on dx)" << endl
-            << "     -enstrophy_sources : compute enstrophy source terms" << endl
-            << "     -grav_accel        : compute gravitational acceleration from potential (GPOT)" << endl
-            << "     -non-periodic      : do not use periodic boundary conditions (default is to assume periodic BCs)" << endl
-            << "     -no-mw             : do not use mass weighting and instead use volume weighting (only relevant for AMR)" << endl
-            << "     -verbose <level>   : verbose level (0, 1, 2) (default: 1)" << endl
+            << "   <OPTIONS>:" << endl
+            << "     -divv                     : compute divergence of velocity" << endl
+            << "     -divb                     : compute divergence of magnetic field" << endl
+            << "     -vort                     : compute vorticity components" << endl
+            << "     -divrhov                  : compute divergence of momentum density (rho*v)" << endl
+            << "     -current                  : compute current components (J = curl of B)" << endl
+            << "     -mag_from_vecpot          : compute magnetic field components from vector potential (B = curl of A)" << endl
+            << "     -MHD_scales               : compute BxJ, B.J and the magnetic tension" << endl
+            << "     -induction                : compute curl(v x B), the induction term" << endl
+            << "     -dissipation_with_nu <nu> : compute viscous dissipation rate from strain tensor" << endl
+            << "                                 (provide kinematic viscosity nu as argument or leave blank -> assume Re=1 on dx)" << endl
+            << "     -enstrophy_sources        : compute enstrophy source terms" << endl
+            << "     -grav_accel               : compute gravitational acceleration from potential (GPOT)" << endl
+            << "     -non-periodic             : do not use periodic boundary conditions (default is to assume periodic BCs)" << endl
+            << "     -no-mw                    : do not use mass weighting and instead use volume weighting (only relevant for AMR)" << endl
+            << "     -verbose <level>          : verbose level (0, 1, 2) (default: 1)" << endl
             << endl
             << "Example: derivative_var DF_hdf5_plt_cnt_0020 -vort -divv" << endl
             << endl << endl;
