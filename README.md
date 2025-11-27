@@ -11,13 +11,17 @@ Directory 'flash_modules' contains the following Flash (v4.0) code modules:
 - Sink particle jet/outflow module (https://www.mso.anu.edu.au/~chfeder/pubs/outflow_model/outflow_model.html)
 - Sink particle heating feedback module (https://ui.adsabs.harvard.edu/abs/2020MNRAS.496.5201M/abstract)
 
-### Copyright notes ###
+### Website ###
 
-See LICENSE file.
+* https://www.mso.anu.edu.au/~chfeder/codes/cfflash/cfflash.html
 
 ### Main contact ###
 
 * Christoph Federrath (christoph.federrath@anu.edu.au)
+
+### Copyright notes ###
+
+See LICENSE file.
 
 ### Disclaimer ###
 
