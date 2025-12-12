@@ -476,94 +476,64 @@ void ComputeTerm(const string term, std::vector<float*>& output, std::vector<flo
 
     if (term == "DissipationRate") { // outputs: 0: viscous dissipation rate; inputs: 0: velx, 1: vely, 2: velz, 3: dens
         /*
-            This function computes the viscous dissipation rate based on Offner et al. (2009).
-            The model is:
-                \dot{e}_{diss} = - \mu (\sigma \cdot \nabla) \cdot v with units of g/cm/s^3,
-            where \sigma is the viscous stress tensor,
-                \sigma = \nu ( S - 2/3 I \nabla \cdot v),
-            and v is the velocity. S is the strain-rate tensor,
-                S = \nabla v - ( \nabla v )^T.
-            The dynamic viscosity is given by
-                \mu = \rho |v| \delta_x / Re_g,
-            where delta_x is the grid differential and Re_g ~ 1 is the Reynolds number at
-            the grid scale. The largest uncertainty is in the Re_g.
-            To compute \mu we assume that on the grid scale the Reynolds number is approximately 1, which is the only
-            assumption for this model. Clearly this is not universally true, but regardless, this only scales the
-            dissipation rate by a proportionality factor, hence the overall dissipation structure is correct.
+            This function computes the viscous dissipation (heating) rate per unit volume [g/cm/s^3 = erg/cm^3/s],
+                \dot{ekin}_{diss} = tau_ij (d_j v_i) = 2 mu S_ij S_ij
+            where S_ij is the traceless rate of strain tensor,
+                S_ij = (1/2) (d_j v_i + d_i v_j) - (1/3) delta_ij div(v),
+            and the viscous stress tensor is
+                tau_ij = 2 mu S_ij
+            The dynamic viscosity mu = rho nu, can either be set based on an input constant kinematic viscosity nu,
+            or estimated from the the grid-scale flow, based on Offner et al. (2009),
+                mu = rho |v| dx / Re_g,
+            where dx is the grid differential, and Re_g ~ 1 is the Reynolds number at the grid scale.
+            To estimate \mu we assume that on the grid scale the Reynolds number Re_g ~ 1.
+            Clearly this is not universally true, but regardless, this only scales the dissipation rate
+            by a proportionality factor, hence the overall dissipation structure is correct.
         */
 
-        double dx = D[X]; // the differential in x for the \nu calculation
-
-        // viscous stress tensor components (rank 2 tensor)
-        double sigma_xx, sigma_xy, sigma_xz;
-        double sigma_yx, sigma_yy, sigma_yz;
-        double sigma_zx, sigma_zy, sigma_zz;
-
         // kinematic viscosity
-        double nu = compute_dissipation_with_nu;
+        double nu0 = compute_dissipation_with_nu;
 
         const double Re_g = 1.0; // use Re_g ~ 1 for the \nu calculation in case user did not set it
 
         for (int k=0; k<NB[Z]; k++) for (int j=0; j<NB[Y]; j++) for (int i=0; i<NB[X]; i++) {
             GetIndices(i, j, k, NB, NBGC, NGC, index, index_gc, il, ir); /// get indices
 
+            double nu = nu0;
             if (nu == 0.0) { // user did not specify \nu -> estimate \nu locally
                 double vel_mag = sqrt( (double)input[0][index_gc]*(double)input[0][index_gc] +
-                                    (double)input[1][index_gc]*(double)input[1][index_gc] +
-                                    (double)input[2][index_gc]*(double)input[2][index_gc] );
-                nu = vel_mag * dx / Re_g; // kinematic viscosity estimate
+                                       (double)input[1][index_gc]*(double)input[1][index_gc] +
+                                       (double)input[2][index_gc]*(double)input[2][index_gc] );
+                nu = vel_mag * D[X] / Re_g; // kinematic viscosity estimate
             }
 
             // dynamic viscosity: mu = rho * nu
             double mu = (double)input[3][index_gc] * nu;
 
-            // x components
-            // sigma_xx = - mu 2/3 div(v)
-            sigma_xx = -2.0/3.0 * ( ((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] +
-                                    ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] +
-                                    ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z]);
-            // sigma_xy = mu(\partial_y v_x - \partial_x v_y)
-            sigma_xy =  ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] -
-                        ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X];
-            // sigma_xz = mu(\partial_z v_x - \partial_x v_z)
-            sigma_xz =  ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z] -
-                        ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X];
+            // precompute velocity gradients
+            double dvx_dx = ((double)input[0][ir[X]] - (double)input[0][il[X]]) * DD[X];
+            double dvy_dx = ((double)input[1][ir[X]] - (double)input[1][il[X]]) * DD[X];
+            double dvz_dx = ((double)input[2][ir[X]] - (double)input[2][il[X]]) * DD[X];
+            double dvx_dy = ((double)input[0][ir[Y]] - (double)input[0][il[Y]]) * DD[Y];
+            double dvy_dy = ((double)input[1][ir[Y]] - (double)input[1][il[Y]]) * DD[Y];
+            double dvz_dy = ((double)input[2][ir[Y]] - (double)input[2][il[Y]]) * DD[Y];
+            double dvx_dz = ((double)input[0][ir[Z]] - (double)input[0][il[Z]]) * DD[Z];
+            double dvy_dz = ((double)input[1][ir[Z]] - (double)input[1][il[Z]]) * DD[Z];
+            double dvz_dz = ((double)input[2][ir[Z]] - (double)input[2][il[Z]]) * DD[Z];
 
-            // y components
-            // sigma_yx = mu(\partial_x v_y - \partial_y v_x)
-            sigma_yx =  ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] -
-                        ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y];
-            // sigma_yy = - mu 2/3 div(v)
-            sigma_yy = sigma_xx;
-            // sigma_yz = mu(\partial_z v_y - \partial_y v_z)
-            sigma_yz =  ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z] -
-                        ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y];
+            // divergence of v
+            double divv = dvx_dx + dvy_dy + dvz_dz;
 
-            // z components
-            // sigma_zx = mu(\partial_x v_z - \partial_z v_x)
-            sigma_zx =  ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] -
-                        ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z];
-            // sigma_zy = mu(\partial_y v_z - \partial_z v_y)
-            sigma_zy =  ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] -
-                        ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z];
-            // sigma_zz = - mu 2/3 div(v)
-            sigma_zz = sigma_xx;
+            // rate-of-strain tensor S_ij = (1/2) (d_j v_i + d_i v_j) - (1/3) delta_ij div(v)
+            double S_xx = dvx_dx - divv / 3.0;
+            double S_yy = dvy_dy - divv / 3.0;
+            double S_zz = dvz_dz - divv / 3.0;
+            double S_xy = 0.5 * (dvx_dy + dvy_dx);
+            double S_xz = 0.5 * (dvx_dz + dvz_dx);
+            double S_yz = 0.5 * (dvy_dz + dvz_dy);
 
-            /*
-                \dot{e}_viscous = sigma_ij partial_j v_i =
-                    -(  [sigma_xx partial_x v_x + sigma_yx partial_x v_y + sigma_zx partial_x v_z] +
-                        [sigma_xy partial_y v_x + sigma_yy partial_y v_y + sigma_zy partial_y v_z] +
-                        [sigma_xz partial_z v_x + sigma_yz partial_z v_y + sigma_zz partial_z v_z]  )
-            */
-            output[0][index] = -mu *( ( sigma_xx * ( ((double)input[0][ir[X]]-(double)input[0][il[X]]) * DD[X] ) +
-                                        sigma_yx * ( ((double)input[1][ir[X]]-(double)input[1][il[X]]) * DD[X] ) +
-                                        sigma_zx * ( ((double)input[2][ir[X]]-(double)input[2][il[X]]) * DD[X] ) ) +
-                                      ( sigma_xy * ( ((double)input[0][ir[Y]]-(double)input[0][il[Y]]) * DD[Y] ) +
-                                        sigma_yy * ( ((double)input[1][ir[Y]]-(double)input[1][il[Y]]) * DD[Y] ) +
-                                        sigma_zy * ( ((double)input[2][ir[Y]]-(double)input[2][il[Y]]) * DD[Y] ) ) +
-                                      ( sigma_xz * ( ((double)input[0][ir[Z]]-(double)input[0][il[Z]]) * DD[Z] ) +
-                                        sigma_yz * ( ((double)input[1][ir[Z]]-(double)input[1][il[Z]]) * DD[Z] ) +
-                                        sigma_zz * ( ((double)input[2][ir[Z]]-(double)input[2][il[Z]]) * DD[Z] ) ) );
+            // dissipation rate per unit volume
+            output[0][index] = 2.0 * mu * ( S_xx*S_xx + S_yy*S_yy + S_zz*S_zz + 2.0 * ( S_xy*S_xy + S_xz*S_xz + S_yz*S_yz ) );
 
         } // loop over cells
     }
