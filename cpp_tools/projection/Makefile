@@ -72,8 +72,13 @@ HDF5_PATH = /opt/local
 SZIP_PATH = /opt/local
 CCFLAGS = -O3 -g -Wall
 LDFLAGS = -O3 -g -Wall
-CCFLAGS += -I$(HDF5_PATH)/include -I$(SZIP_PATH)
-LDFLAGS += -L$(HDF5_PATH)/lib -lhdf5 -lz -L$(SZIP_PATH) -lsz
+ifneq (,$(findstring TwisterGame,$(HOST)))
+	CCFLAGS += -I/usr/include/hdf5/openmpi
+	LDFLAGS += -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi/lib -lhdf5 -lz
+else
+	CCFLAGS += -I$(HDF5_PATH)/include -I$(SZIP_PATH)
+	LDFLAGS += -L$(HDF5_PATH)/lib -lhdf5 -lz -L$(SZIP_PATH) -lsz
+endif
 endif
 
 BINS = projection
