@@ -4,9 +4,17 @@
 
   Merge split FLASH plot files (HDF5)
 
-  By Christoph Federrath, 2013-2025
+  By Christoph Federrath, 2013-2026
 
 */
+
+// The default is to use single precision arithmetic.
+// For double precision, set the following to double and H5T_NATIVE_DOUBLE.
+#define FLASH_GG_REAL float
+#define FLASH_GG_H5_REAL H5T_NATIVE_FLOAT
+
+#define FLASH_PARTICLES_REAL float
+#define FLASH_PARTICLES_H5_REAL H5T_NATIVE_FLOAT
 
 #include "mpi.h" /// MPI lib
 #include <iostream>
@@ -21,8 +29,9 @@
 #include <cmath>
 #include <hdf5.h>
 #include "../Libs/HDFIO.h" // HDF5 IO
-#include "../Libs/FlashGG.h" /// Flash Grid class
-#include "../Libs/CFTools.h"
+#include "../Libs/FlashGG.h" // General Grid class
+#include "../Libs/CFTools.h" // Tools class
+#include "../Libs/FlashParticles.h" // Particle class
 
 // constants
 #define NDIM 3
@@ -37,13 +46,15 @@ string inputfile;
 string outpath = "";
 int splitnum = 0;
 vector<string> DatasetNames(0);
+vector<string> ParticleProperties(0);
+bool process_particles = true;
 int Verbose = 1;
 
 // forward functions
 int ParseInputs(const vector<string> Argument);
 void HelpMe(void);
-int CompareArrays(const   int * const a, const   int * const b, const long int n);
-int CompareArrays(const float * const a, const float * const b, const long int n);
+int CompareArrays(const           int * const a, const           int * const b, const long int n);
+int CompareArrays(const FLASH_GG_REAL * const a, const FLASH_GG_REAL * const b, const long int n);
 
 /// --------
 ///   MAIN
@@ -68,22 +79,25 @@ int main(int argc, char * argv[])
 
     if (Verbose && MyPE==0) cout<<"=== merge_split_flash_files === using MPI num procs: "<<NPE<<endl;
 
-    /// determine dump number, i/o filename(s), plt or chk file type, etc.
+    /// determine dump number, i/o filename(s), plt or chk or part file type, etc.
     string dump_str = inputfile.substr(inputfile.size()-4, 4);
-    vector<string> plt_or_chk; plt_or_chk.push_back("_hdf5_plt_cnt_"); plt_or_chk.push_back("_hdf5_chk_");
-    string plt_or_chk_str = "";
+    vector<string> filetype;
+    filetype.push_back("_hdf5_plt_cnt_");
+    filetype.push_back("_hdf5_part_");
+    filetype.push_back("_hdf5_chk_");
+    string filetype_str = "";
     string flashbasename = "";
-    for (unsigned int i = 0; i < plt_or_chk.size(); i++) {
-        size_t pos = inputfile.find(plt_or_chk[i]);
+    for (unsigned int i = 0; i < filetype.size(); i++) {
+        size_t pos = inputfile.find(filetype[i]);
         if (pos != string::npos) {
-            plt_or_chk_str = plt_or_chk[i];
+            filetype_str = filetype[i];
             flashbasename = (pos != string::npos) ? inputfile.substr(0, pos-6) : inputfile;
         }
     }
-    string outputfile = outpath+flashbasename+plt_or_chk_str+dump_str;
+    string outputfile = outpath+flashbasename+filetype_str+dump_str;
     if (MyPE==0 && Verbose>1) {
         cout << "inputfile = " << inputfile << endl;
-        cout << "plt_or_chk_str = " << plt_or_chk_str << endl;
+        cout << "filetype_str = " << filetype_str << endl;
         cout << "outputfile = " << outputfile << endl;
         cout << "flashbasename = " << flashbasename << endl;
         cout << "outpath = " << outpath << endl;
@@ -113,218 +127,312 @@ int main(int argc, char * argv[])
         ifs_infile.close();
 
         // now copy meta data using HDF5 command line tool 'h5copy'
-        string cp_dataset_list[17] = {"block size", "bounding box", "coordinates", "gid", "integer runtime parameters",
-                                     "integer scalars", "logical runtime parameters", "logical scalars", "node type",
-                                     "processor number", "real runtime parameters", "real scalars", "refine level",
-                                     "sim info", "string runtime parameters", "string scalars", "unknown names"};
-        for (int i=0; i<17; i++)
+        string cp_dataset_list[18] = {"block size", "bounding box", "coordinates", "gid", "integer runtime parameters",
+                                      "integer scalars", "logical runtime parameters", "logical scalars", "node type",
+                                      "processor number", "real runtime parameters", "real scalars", "refine level",
+                                      "sim info", "string runtime parameters", "string scalars", "unknown names",
+                                      "particle names"};
+        HDFIO hdfio_in = HDFIO(inputfile, 'r');
+        for (int i=0; i<18; i++)
         {
-            string cmd = "h5copy -i "+inputfile+" -o "+outputfile+" -s '"+cp_dataset_list[i]+"' -d '"+cp_dataset_list[i]+"'";
-            if (Verbose) cout<<"calling system command: "<<cmd<<endl;
-            system(cmd.c_str());
+            if (hdfio_in.dataset_exists(cp_dataset_list[i])) {
+                string cmd = "h5copy -i "+inputfile+" -o "+outputfile+
+                                " -s '"+ cp_dataset_list[i]+"' -d '"+cp_dataset_list[i]+"'";
+                if (Verbose) cout<<"calling system command: "<<cmd<<endl;
+                system(cmd.c_str());
+            }
         }
-        if (Verbose) cout<<"Copying of meta data done."<<endl;
+        hdfio_in.close();
+        if (Verbose) cout<<"Copying meta data done."<<endl;
     }
 
     /// wait until everybody is here
     MPI_Barrier(MPI_COMM_WORLD);
 
-    /// Here we create the big target datasets with zeros (in parallel).
-    /// First get the dimensions of the datasets (NBLK and NB[X,Y,Z]).
-    /// Then create the big target datasets (just filled with zeros) in the output file.
-    FlashGG gg_inp = FlashGG(inputfile, Verbose);
-    int NBLK = gg_inp.GetNumBlocks();
-    vector<int> NB = gg_inp.GetNumCellsInBlock();
-    if (Verbose && MyPE==0) gg_inp.PrintInfo();
-    vector<int> dims(4);
-    dims[0] = NBLK;
-    dims[1] = NB[Z];
-    dims[2] = NB[Y];
-    dims[3] = NB[X];
-    /// loop over all the block variables in the plot file
-    HDFIO hdfio_out = HDFIO(outputfile, 'w');
-    for (unsigned int ds=0; ds<DatasetNames.size(); ds++)
-        hdfio_out.create_dataset(DatasetNames[ds], dims, H5T_NATIVE_FLOAT, MPI_COMM_WORLD);
-    hdfio_out.close();
-    if (Verbose && MyPE==0) cout << "Output datasets created..." << endl;
+    // plt or chk file
+    if ((filetype_str == filetype[0]) || (filetype_str == filetype[2])) {
 
-    /// decompose domain in blocks
-    vector<int> MyBlocks = gg_inp.GetMyBlocks();
-
-    /// for each block, find the file that contains this block
-    vector<string> BlockFile(MyBlocks.size());
-    for (int f=0; f<splitnum; f++) {
-        if (MyPE==0 && Verbose>1) cout << "f counter = " << f << endl;
-        char split_str[80]; snprintf(split_str, sizeof(split_str), "%4.4d", f);
-        if (MyPE==0 && Verbose>1) cout << "split_str = " << split_str << endl;
-        string filename = flashbasename+"_s"+split_str+plt_or_chk_str+dump_str;
-        if (MyPE==0 && Verbose>1) cout << "filename = " << filename << endl;
-        FlashGG gg_in = FlashGG(filename, Verbose);
-        vector<int> NodeType = gg_in.GetNodeType();
-        for (unsigned int ib=0; ib<MyBlocks.size(); ib++) {
-            int b = MyBlocks[ib];
-            if (NodeType[b] == 1) BlockFile[ib] = filename;
+        /// Here we create the big target datasets with zeros (in parallel).
+        /// First get the dimensions of the datasets (NBLK and NB[X,Y,Z]).
+        /// Then create the big target datasets (just filled with zeros) in the output file.
+        FlashGG gg_inp = FlashGG(inputfile, Verbose);
+        int NBLK = gg_inp.GetNumBlocks();
+        vector<int> NB = gg_inp.GetNumCellsInBlock();
+        if (Verbose && MyPE==0) gg_inp.PrintInfo();
+        vector<int> dims(4);
+        dims[0] = NBLK;
+        dims[1] = NB[Z];
+        dims[2] = NB[Y];
+        dims[3] = NB[X];
+        /// loop over all the requested block variables in the plot file
+        HDFIO hdfio_out = HDFIO(outputfile, 'w');
+        if (DatasetNames.size() == 0) {
+            DatasetNames = gg_inp.ReadUnknownNames();
         }
-    }
-    if (Verbose>1) {
+        for (unsigned int ds=0; ds<DatasetNames.size(); ds++)
+            hdfio_out.create_dataset(DatasetNames[ds], dims, FLASH_GG_H5_REAL, MPI_COMM_WORLD);
+        hdfio_out.close();
+        if (Verbose && MyPE==0) cout << "Output datasets created..." << endl;
+
+        /// decompose domain in blocks
+        vector<int> MyBlocks = gg_inp.GetMyBlocks();
+        gg_inp.close();
+
+        /// for each block, find the file that contains this block
+        vector<string> BlockFile(MyBlocks.size());
+        for (int f=0; f<splitnum; f++) {
+            if (MyPE==0 && Verbose>1) cout << "f counter = " << f << endl;
+            char split_str[80]; snprintf(split_str, sizeof(split_str), "%4.4d", f);
+            if (MyPE==0 && Verbose>1) cout << "split_str = " << split_str << endl;
+            string filename = flashbasename+"_s"+split_str+filetype_str+dump_str;
+            if (MyPE==0 && Verbose>1) cout << "filename = " << filename << endl;
+            FlashGG gg_in = FlashGG(filename, Verbose);
+            vector<int> NodeType = gg_in.GetNodeType();
+            for (unsigned int ib=0; ib<MyBlocks.size(); ib++) {
+                int b = MyBlocks[ib];
+                if (NodeType[b] == 1) BlockFile[ib] = filename;
+            }
+        }
+        if (Verbose>1) {
+            for (unsigned int ib=0; ib<MyBlocks.size(); ib++)
+                cout<<" ["<<MyPE<<"] MyBlock="<<MyBlocks[ib]<<" BlockFile="<<BlockFile[ib]<<endl;
+        }
+
+        if (Verbose && MyPE==0) cout << "Entering merging loop now..." << endl;
+
+        /// open the FLASH output file in order to merge everything into it
+        FlashGG gg_out = FlashGG(outputfile, 'w', Verbose);
+
+        /// loop over all of my blocks, open the right files and overwrite datasets
+        CFTools cft = CFTools(); // initialise progress bar
         for (unsigned int ib=0; ib<MyBlocks.size(); ib++)
-            cout<<" ["<<MyPE<<"] MyBlock="<<MyBlocks[ib]<<" BlockFile="<<BlockFile[ib]<<endl;
-    }
+        {
+            /// write progress
+            if (MyPE==0) cft.PrintProgressBar(ib, MyBlocks.size());
 
-    if (Verbose && MyPE==0) cout << "Entering merging loop now..." << endl;
+            /// get actual block index
+            int b = MyBlocks[ib];
+            string splitfile = BlockFile[ib];
+            FlashGG gg_in = FlashGG(splitfile, Verbose);
 
-    /// open the FLASH output file in order to merge everything into it
-    FlashGG gg_out = FlashGG(outputfile, 'w', Verbose);
+            if (Verbose>1) cout<<" ["<<MyPE<<"] working on block "<< b << "; my file: " << splitfile << endl;
 
-    /// loop over all of my blocks, open the right files and overwrite datasets
-    CFTools cft = CFTools(); // initialise progress bar
-    for (unsigned int ib=0; ib<MyBlocks.size(); ib++)
-    {
-        /// write progress
-        if (MyPE==0) cft.PrintProgressBar(ib, MyBlocks.size());
+            long int array_size = 0;
 
-        /// get actual block index
-        int b = MyBlocks[ib];
-        string splitfile = BlockFile[ib];
-        FlashGG gg_in = FlashGG(splitfile, Verbose);
+            /// read block size from split file and overwrite in output file
+            FLASH_GG_REAL *block_size = gg_in.ReadBlockSize(b, array_size);
+            gg_out.OverwriteBlockSize(b, block_size);
+            delete [] block_size;
 
-        if (Verbose>1) cout<<" ["<<MyPE<<"] working on block "<< b << "; my file: " << splitfile << endl;
+            /// read block bounding box from split file and overwrite in output file
+            FLASH_GG_REAL *block_bb = gg_in.ReadBoundingBox(b, array_size);
+            gg_out.OverwriteBoundingBox(b, block_bb);
+            delete [] block_bb;
 
-        long int array_size = 0;
+            /// read block coordinates from split file and overwrite in output file
+            FLASH_GG_REAL *block_coords = gg_in.ReadCoordinates(b, array_size);
+            gg_out.OverwriteCoordinates(b, block_coords);
+            delete [] block_coords;
 
-        /// read block size from split file and overwrite in output file
-        float *block_size = gg_in.ReadBlockSize(b, array_size);
-        gg_out.OverwriteBlockSize(b, block_size);
-        delete [] block_size;
+            /// read block GID from split file and overwrite in output file
+            int *block_gid = gg_in.ReadGID(b, array_size);
+            gg_out.OverwriteGID(b, block_gid);
+            delete [] block_gid;
 
-        /// read block bounding box from split file and overwrite in output file
-        float *block_bb = gg_in.ReadBoundingBox(b, array_size);
-        gg_out.OverwriteBoundingBox(b, block_bb);
-        delete [] block_bb;
+            /// read block node type from split file and overwrite in output file
+            int *block_nodetype = gg_in.ReadNodeType(b, array_size);
+            gg_out.OverwriteNodeType(b, block_nodetype);
+            delete [] block_nodetype;
 
-        /// read block coordinates from split file and overwrite in output file
-        float *block_coords = gg_in.ReadCoordinates(b, array_size);
-        gg_out.OverwriteCoordinates(b, block_coords);
-        delete [] block_coords;
+            /// read block proc number from split file and overwrite in output file
+            int *block_procnum = gg_in.ReadProcessorNumber(b, array_size);
+            gg_out.OverwriteProcessorNumber(b, block_procnum);
+            delete [] block_procnum;
 
-        /// read block GID from split file and overwrite in output file
-        int *block_gid = gg_in.ReadGID(b, array_size);
-        gg_out.OverwriteGID(b, block_gid);
-        delete [] block_gid;
+            /// read block refine level from split file and overwrite in output file
+            int *block_reflev = gg_in.ReadRefineLevel(b, array_size);
+            gg_out.OverwriteRefineLevel(b, block_reflev);
+            delete [] block_reflev;
 
-        /// read block node type from split file and overwrite in output file
-        int *block_nodetype = gg_in.ReadNodeType(b, array_size);
-        gg_out.OverwriteNodeType(b, block_nodetype);
-        delete [] block_nodetype;
+            /// loop over all the block variables in the plot file
+            for (unsigned int ds=0; ds<DatasetNames.size(); ds++) {
+                /// read block data from split file and overwrite in output file
+                FLASH_GG_REAL *block_data = gg_in.ReadBlockVar(b, DatasetNames[ds]);
+                gg_out.OverwriteBlockVar(b, DatasetNames[ds], block_data);
+                delete [] block_data;
+            }
 
-        /// read block proc number from split file and overwrite in output file
-        int *block_procnum = gg_in.ReadProcessorNumber(b, array_size);
-        gg_out.OverwriteProcessorNumber(b, block_procnum);
-        delete [] block_procnum;
+        } //end loop over my blocks
 
-        /// read block refine level from split file and overwrite in output file
-        int *block_reflev = gg_in.ReadRefineLevel(b, array_size);
-        gg_out.OverwriteRefineLevel(b, block_reflev);
-        delete [] block_reflev;
+        /// write new unknown names depending on requested grid block datasets
+        gg_out.OverwriteUnknownNames(DatasetNames);
 
-        /// loop over all the block variables in the plot file
-        for (unsigned int ds=0; ds<DatasetNames.size(); ds++) {
-            /// read block data from split file and overwrite in output file
-            float *block_data = gg_in.ReadBlockVar(b, DatasetNames[ds]);
-            gg_out.OverwriteBlockVar(b, DatasetNames[ds], block_data);
-            delete [] block_data;
-        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (Verbose && MyPE==0) cout << "Starting verification now..." << endl;
 
-    } //end loop over my blocks
+        // loop again and verify written data
+        cft.InitProgressBar();
+        for (unsigned int ib=0; ib<MyBlocks.size(); ib++)
+        {
+            /// write progress
+            if (MyPE==0) cft.PrintProgressBar(ib, MyBlocks.size());
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (Verbose && MyPE==0) cout << "Starting verification now..." << endl;
+            /// get actual block index
+            int b = MyBlocks[ib];
+            string splitfile = BlockFile[ib];
+            FlashGG gg_in = FlashGG(splitfile, Verbose);
 
-    // loop again and verify written data
-    cft.InitProgressBar();
-    for (unsigned int ib=0; ib<MyBlocks.size(); ib++)
-    {
-        /// write progress
-        if (MyPE==0) cft.PrintProgressBar(ib, MyBlocks.size());
+            FLASH_GG_REAL *in_d = 0, *out_d = 0;
+            int           *in_i = 0, *out_i = 0;
+            long int array_size = 0;
 
-        /// get actual block index
-        int b = MyBlocks[ib];
-        string splitfile = BlockFile[ib];
-        FlashGG gg_in = FlashGG(splitfile, Verbose);
-
-        float *in_d = 0, *out_d = 0;
-        int    *in_i = 0, *out_i = 0;
-        long int array_size = 0;
-
-        /// read block size from split file and check in output file
-        in_d = gg_in.ReadBlockSize(b, array_size);
-        out_d = gg_out.ReadBlockSize(b, array_size);
-        if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in block size file: "<<splitfile<<" block: "<<b<<endl;
-        delete [] in_d;
-        delete [] out_d;
-
-        /// read block bounding box from split file and check in output file
-        in_d = gg_in.ReadBoundingBox(b, array_size);
-        out_d = gg_out.ReadBoundingBox(b, array_size);
-        if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in bounding box. file: "<<splitfile<<" block: "<<b<<endl;
-        delete [] in_d;
-        delete [] out_d;
-
-        /// read block coordinates from split file and check in output file
-        in_d = gg_in.ReadCoordinates(b, array_size);
-        out_d = gg_out.ReadCoordinates(b, array_size);
-        if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in coordinates. file: "<<splitfile<<" block: "<<b<<endl;
-        delete [] in_d;
-        delete [] out_d;
-
-        /// read block gid from split file and check in output file
-        in_i = gg_in.ReadGID(b, array_size);
-        out_i = gg_out.ReadGID(b, array_size);
-        if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in gid file: "<<splitfile<<" block: "<<b<<endl;
-        delete [] in_i;
-        delete [] out_i;
-
-        /// read block node type from split file and check in output file
-        in_i = gg_in.ReadNodeType(b, array_size);
-        out_i = gg_out.ReadNodeType(b, array_size);
-        if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in node type file: "<<splitfile<<" block: "<<b<<endl;
-        delete [] in_i;
-        delete [] out_i;
-
-        /// read block proc num from split file and check in output file
-        in_i = gg_in.ReadProcessorNumber(b, array_size);
-        out_i = gg_out.ReadProcessorNumber(b, array_size);
-        if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in processor number file: "<<splitfile<<" block: "<<b<<endl;
-        delete [] in_i;
-        delete [] out_i;
-
-        /// read block refine level from split file and check in output file
-        in_i = gg_in.ReadRefineLevel(b, array_size);
-        out_i = gg_out.ReadRefineLevel(b, array_size);
-        if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in refine level file: "<<splitfile<<" block: "<<b<<endl;
-        delete [] in_i;
-        delete [] out_i;
-
-        /// loop over all the block variables in the plot file
-        for (unsigned int ds=0; ds<DatasetNames.size(); ds++) {
-            /// read block data from split file and check in output file
-            in_d = gg_in.ReadBlockVar(b, DatasetNames[ds], array_size);
-            out_d = gg_out.ReadBlockVar(b, DatasetNames[ds], array_size);
-            if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in "<<DatasetNames[ds]<<" file: "<<splitfile<<" block: "<<b<<endl;
+            /// read block size from split file and check in output file
+            in_d = gg_in.ReadBlockSize(b, array_size);
+            out_d = gg_out.ReadBlockSize(b, array_size);
+            if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in block size file: "<<splitfile<<" block: "<<b<<endl;
             delete [] in_d;
             delete [] out_d;
+
+            /// read block bounding box from split file and check in output file
+            in_d = gg_in.ReadBoundingBox(b, array_size);
+            out_d = gg_out.ReadBoundingBox(b, array_size);
+            if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in bounding box. file: "<<splitfile<<" block: "<<b<<endl;
+            delete [] in_d;
+            delete [] out_d;
+
+            /// read block coordinates from split file and check in output file
+            in_d = gg_in.ReadCoordinates(b, array_size);
+            out_d = gg_out.ReadCoordinates(b, array_size);
+            if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in coordinates. file: "<<splitfile<<" block: "<<b<<endl;
+            delete [] in_d;
+            delete [] out_d;
+
+            /// read block gid from split file and check in output file
+            in_i = gg_in.ReadGID(b, array_size);
+            out_i = gg_out.ReadGID(b, array_size);
+            if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in gid file: "<<splitfile<<" block: "<<b<<endl;
+            delete [] in_i;
+            delete [] out_i;
+
+            /// read block node type from split file and check in output file
+            in_i = gg_in.ReadNodeType(b, array_size);
+            out_i = gg_out.ReadNodeType(b, array_size);
+            if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in node type file: "<<splitfile<<" block: "<<b<<endl;
+            delete [] in_i;
+            delete [] out_i;
+
+            /// read block proc num from split file and check in output file
+            in_i = gg_in.ReadProcessorNumber(b, array_size);
+            out_i = gg_out.ReadProcessorNumber(b, array_size);
+            if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in processor number file: "<<splitfile<<" block: "<<b<<endl;
+            delete [] in_i;
+            delete [] out_i;
+
+            /// read block refine level from split file and check in output file
+            in_i = gg_in.ReadRefineLevel(b, array_size);
+            out_i = gg_out.ReadRefineLevel(b, array_size);
+            if (CompareArrays(in_i,out_i,array_size) != 0) cout<<"ERROR in refine level file: "<<splitfile<<" block: "<<b<<endl;
+            delete [] in_i;
+            delete [] out_i;
+
+            /// loop over all the block variables in the plot file
+            for (unsigned int ds=0; ds<DatasetNames.size(); ds++) {
+                /// read block data from split file and check in output file
+                in_d = gg_in.ReadBlockVar(b, DatasetNames[ds], array_size);
+                out_d = gg_out.ReadBlockVar(b, DatasetNames[ds], array_size);
+                if (CompareArrays(in_d,out_d,array_size) != 0) cout<<"ERROR in "<<DatasetNames[ds]<<" file: "<<splitfile<<" block: "<<b<<endl;
+                delete [] in_d;
+                delete [] out_d;
+            }
+
+        } //end loop over my blocks
+
+        gg_out.close();
+
+        /// print info to shell
+        if (Verbose && MyPE==0) {
+            cout<<"Standard FLASH arrays"<<endl;
+            cout<<"block size, bounding box, coordinates, gid, node type, processor number, refine level"<<endl;
+            cout<<"and plot variable(s)";
+            for (unsigned int ds=0; ds<DatasetNames.size(); ds++)
+                cout<<" '"+DatasetNames[ds]+"'";
+            cout<<endl<<"in merged file '"+outputfile+"' written."<<endl;
         }
 
-    } //end loop over my blocks
+    } // plt or chk file
 
-    /// print info to shell
-    if (Verbose && MyPE==0) {
-        cout<<"Standard FLASH arrays"<<endl;
-        cout<<"block size, bounding box, coordinates, gid, node type, processor number, refine level"<<endl;
-        for (unsigned int ds=0; ds<DatasetNames.size(); ds++)
-            cout<<"and plot variable '"+DatasetNames[ds]+"'"<<endl;
-        cout<<"in merged file '"+outputfile+"' written."<<endl;
-    }
+    // processing particles (part or chk file)
+    if (process_particles && ((filetype_str == filetype[1]) || (filetype_str == filetype[2]))) {
+
+        FlashParticles Particles;
+        long np_tot = 0;
+
+        // loop over all split files and get the total number of particles
+        for (int f=0; f<splitnum; f++) {
+            char split_str[80]; snprintf(split_str, sizeof(split_str), "%4.4d", f);
+            string filename = flashbasename+"_s"+split_str+filetype_str+dump_str;
+            Particles = FlashParticles(filename);
+            long np = Particles.GetN();
+            np_tot += np;
+        }
+        if (Verbose && MyPE==0) cout << "Total number of particles: "<<np_tot<<endl;
+
+        // if there are any particles at all, we create the target output dataset
+        if (np_tot > 0) {
+
+            // if the user did not request any specific particle properties, we merge them all
+            if (ParticleProperties.size() == 0) ParticleProperties = Particles.GetPropertyNames();
+
+            /// Create target particle dataset with zeros (in parallel).
+            HDFIO hdfio_out = HDFIO(outputfile, 'w');
+            vector<int> dims(2);
+            dims[0] = np_tot;
+            dims[1] = ParticleProperties.size();
+            hdfio_out.create_dataset("tracer particles", dims, FLASH_PARTICLES_H5_REAL, MPI_COMM_WORLD);
+            if (Verbose && MyPE==0) cout<<"Output particle dataset created..."<<endl;
+
+            // loop over split files again to merge into output file
+            unsigned long np_tot_accum = 0;
+            for (int f=0; f<splitnum; f++) {
+                // open split file and init particles
+                char split_str[80]; snprintf(split_str, sizeof(split_str), "%4.4d", f);
+                string filename = flashbasename+"_s"+split_str+filetype_str+dump_str;
+                if (Verbose && MyPE==0)
+                    cout<<"Merging particles from file '"<<filename<<"' to '"<<outputfile<<"'..."<<endl;
+                Particles = FlashParticles(filename);
+                long np = Particles.GetN();
+                // domain decomposition
+                vector<int> MyParts = Particles.GetMyParticles(MyPE, NPE, np);
+                for (unsigned int ipp=0; ipp<ParticleProperties.size(); ipp++) {
+                    // read slab
+                    FLASH_PARTICLES_REAL *prop = Particles.ReadVar(ParticleProperties[ipp], MyParts[0], MyParts.size());
+                    // overwrite slab
+                    hdfio_out.overwrite_slab(prop, "tracer particles", FLASH_PARTICLES_H5_REAL,
+                        (hsize_t[]){np_tot_accum+(unsigned long)MyParts[0],ipp}, (hsize_t[]){MyParts.size(),1},
+                        2, (hsize_t[]){0,0}, (hsize_t[]){MyParts.size(),1}, MPI_COMM_WORLD);
+                } // loop over particle properties
+                // accumulate total particle count for offset
+                np_tot_accum += np;
+            } // loop over split files
+
+            hdfio_out.close();
+
+            // overwrite particle names with the list of requested particle properties
+            Particles = FlashParticles(outputfile, 'w');
+            Particles.OverwriteParticleNames(ParticleProperties);
+            Particles.close();
+
+            /// print info to shell
+            if (Verbose && MyPE==0) {
+                cout<<"Particle property(ies)";
+                for (unsigned int ipp=0; ipp<ParticleProperties.size(); ipp++)
+                    cout<<" '"+ParticleProperties[ipp]+"'";
+                cout<<endl<<"in merged file '"+outputfile+"' written."<<endl;
+            }
+
+        } // np_tot > 0
+
+    } // particle file
 
     /// print out wallclock time used
     long endtime = time(NULL);
@@ -350,7 +458,7 @@ int CompareArrays(const int * const a, const int * const b, const long int n)
     if (diff_found) return -1; else return 0;
 }
 
-int CompareArrays(const float * const a, const float * const b, const long int n)
+int CompareArrays(const FLASH_GG_REAL * const a, const FLASH_GG_REAL * const b, const long int n)
 {
     bool diff_found = false;
     for (int i=0; i<n; i++)
@@ -371,6 +479,8 @@ int ParseInputs(const vector<string> Argument)
     vector<string> valid_options;
     valid_options.push_back("-sn");
     valid_options.push_back("-dsets");
+    valid_options.push_back("-pprops");
+    valid_options.push_back("-no_particles");
     valid_options.push_back("-o");
     valid_options.push_back("-verbose");
     for (unsigned int i = 0; i < Argument.size(); i++) {
@@ -404,6 +514,16 @@ int ParseInputs(const vector<string> Argument)
             for (unsigned int j = i+1; j < Argument.size(); j++) {
                 if (Argument[j].at(0) != '-') DatasetNames.push_back(Argument[j]); else break;
             }
+        }
+        if (Argument[i] != "" && Argument[i] == "-pprops")
+        {
+            for (unsigned int j = i+1; j < Argument.size(); j++) {
+                if (Argument[j].at(0) != '-') ParticleProperties.push_back(Argument[j]); else break;
+            }
+        }
+        if (Argument[i] != "" && Argument[i] == "-no_particles")
+        {
+            process_particles = false;
         }
         if (Argument[i] != "" && Argument[i] == "-o")
         {
@@ -447,12 +567,14 @@ void HelpMe(void)
         cout << endl
         << "Syntax:" << endl
         << " merge_split_flash_files <inputsplitfile> [<OPTIONS>]" << endl << endl
-        << "     -sn <number>            : number of split files" << endl
-        << "     -dsets <datasetname(s)> : FLASH variables to be processed (e.g, dens velx ...)" << endl
-        << "     -o <outputpath>         : output path (default: same as input path)" << endl
-        << "     -verbose <level>        : verbose level (0, 1, 2) (default: 1)" << endl
+        << "     -sn <number>             : number of split files" << endl
+        << "     -dsets <datasetname(s)>  : FLASH grid block variables to be processed (e.g, dens velx ...); if empty, process all" << endl
+        << "     -pprops <datasetname(s)> : FLASH particle properties to be processed (e.g, posx velx ...); if empty, process all" << endl
+        << "     -no_particles            : do not process particles" << endl
+        << "     -o <outputpath>          : output path (default: same as input path)" << endl
+        << "     -verbose <level>         : verbose level (0, 1, 2) (default: 1)" << endl
         << endl
-        << "Example: merge_split_flash_files Turb_s0000_hdf5_plt_cnt_0010 -sn 4 -dsets dens velx vely velz"
+        << "Example: merge_split_flash_files Turb_s0000_hdf5_plt_cnt_0010 -sn 4 -dsets dens velx vely velz -pprops posx velx"
         << endl << endl;
     }
 }
