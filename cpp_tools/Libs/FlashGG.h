@@ -55,7 +55,7 @@ namespace NameSpaceFlashGG {
  * handels Uniform Grid and AMR (Paramesh) FLASH v3/4 files
  *
  * @author Christoph Federrath (christoph.federrath@anu.edu.au)
- * @version 2010-2025
+ * @version 2010-2026
  *
  */
 
@@ -119,8 +119,13 @@ class FlashGG
     /// Destructor
     public: ~FlashGG()
     {
-      //hdfio.close();
-      if (Verbose>1) std::cout<<"FlashGG: destructor called."<<std::endl;
+        if (Verbose>1) std::cout<<"FlashGG: destructor called."<<std::endl;
+    };
+
+    /// HDFIO close function
+    public: void close()
+    {
+        hdfio.close();
     };
 
     private: void Constructor(const std::string flashfile, const char read_write_char, MPI_Comm comm, const int verbose)
