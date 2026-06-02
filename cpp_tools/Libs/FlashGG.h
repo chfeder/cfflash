@@ -1514,6 +1514,7 @@ class FlashGG
         std::vector<std::string> ret(n_names);
         for (int i = 0; i < n_names; i++) {
             ret[i] = unk_labels[i];
+            ret[i].erase(ret[i].find_last_not_of(" \n\r\t")+1); // clear whitespace
         }
         // garbage collection
         free (unk_labels[0]);
