@@ -1,6 +1,21 @@
 #ifndef FLASHPARTICLES_H
 #define FLASHPARTICLES_H
 
+// The detault is to use this class with MPI support (to switch off MPI, the user needs to #define NO_MPI)
+#ifdef NO_MPI
+#ifndef MPI_Comm
+#define MPI_Comm int
+#endif
+#ifndef MPI_COMM_NULL
+#define MPI_COMM_NULL 0
+#endif
+#ifndef MPI_COMM_WORLD
+#define MPI_COMM_WORLD 0
+#endif
+#else
+#include <mpi.h>
+#endif
+
 #include "HDFIO.h"
 
 #include <hdf5.h>
@@ -22,7 +37,7 @@
  * FlashParticles class
  *
  * @author Christoph Federrath (christoph.federrath@anu.edu.au)
- * @version 2010-2025
+ * @version 2010-2026
  *
  */
 
@@ -37,30 +52,51 @@ class FlashParticles
         std::map<std::string, int> PartTypeCount;
         int Verbose;
         // HDF input/output and MPI mpi_communicator
-        HDFIO hdfio;// MPI_Comm mpi_comm; int MyPE;
+        HDFIO hdfio; MPI_Comm mpi_comm;
 
     /// Constructors
     public: FlashParticles(void)
     {
         // empty constructor, so we can define a global class object in application code
         Verbose = 0; // avoids message from destructor
-    }
+    };
     public: FlashParticles(const std::string input_filename)
     {
-        this->Constructor(input_filename, 1);
-    }
+        Constructor(input_filename, 'r', MPI_COMM_NULL, 1);
+    };
     public: FlashParticles(const std::string input_filename, const int verbose)
     {
-        this->Constructor(input_filename, verbose);
-    }
-        /// Destructor
+        Constructor(input_filename, 'r', MPI_COMM_NULL, verbose);
+    };
+    public: FlashParticles(const std::string input_filename, const char read_write_char)
+    {
+        if (read_write_char == 'w')
+            Constructor(input_filename, read_write_char, MPI_COMM_WORLD, 1);
+        else
+            Constructor(input_filename, read_write_char, MPI_COMM_NULL, 1);
+    };
+    public: FlashParticles(const std::string input_filename, const char read_write_char, const int verbose)
+    {
+        if (read_write_char == 'w')
+            Constructor(input_filename, read_write_char, MPI_COMM_WORLD, verbose);
+        else
+            Constructor(input_filename, read_write_char, MPI_COMM_NULL, verbose);
+    };
+
+    /// Destructor
     public: ~FlashParticles()
     {
       if (Verbose > 1) std::cout<<__func__<<": destructor called."<<std::endl;
-    }
+    };
+
+    /// HDFIO close function
+    public: void close()
+    {
+        hdfio.close();
+    };
 
     // actual constructor
-    private: void Constructor(const std::string input_filename, const int verbose)
+    private: void Constructor(const std::string input_filename, const char read_write_char, MPI_Comm comm, const int verbose)
     {
         ClassSignature = "FlashParticles: ";
         Filename = "";
@@ -69,32 +105,33 @@ class FlashParticles
         PartType.clear();
         PartTypeCount.clear();
         Verbose = verbose;
+        mpi_comm = comm;
 
         this->SetParticleFilename(input_filename);
         if (Filename != "") {
             if (Verbose > 1) std::cout << ClassSignature << "Using '"<<Filename<<"' as particle file." << std::endl;
             // open file
-            hdfio = HDFIO();
-            hdfio.open(Filename, 'r'); // currently only reading is supported here (no need for MPI then)
+            hdfio = HDFIO(Verbose);
+            hdfio.open(Filename, read_write_char, mpi_comm);
             this->ReadMetaData();
             if (numParticles > 0) {
                 this->SetParticleTypes();
             }
         }
-    }
+    };
 
     // get function signature for printing
     private: std::string FuncSig(const std::string funcname)
     {
         return ClassSignature+funcname+": ";
-    }
+    };
 
     // clear whitespace and/or terminators at the end of a string
     private: std::string Trim(const std::string input)
     {
         std::string ret = input;
         return ret.erase(input.find_last_not_of(" \n\r\t")+1);
-    }
+    };
 
     /// Determine the FLASH particle filename; for example, if a plt file is supplied
     private: void SetParticleFilename(std::string input_filename)
@@ -111,7 +148,7 @@ class FlashParticles
             if (ifs_file.good()) Filename = partfile;
             else if (Verbose > 1) std::cout<<FuncSig(__func__)<<"WARNING. Could not find matching particle file."<<std::endl;
         } // is plt file
-    }
+    };
 
     /**
       * ReadMetaData
@@ -120,6 +157,7 @@ class FlashParticles
     private: void ReadMetaData()
     {
         /// read number of particles
+        if (!hdfio.dataset_exists("tracer particles")) return;
         std::vector<int> dims = hdfio.getDims("tracer particles");
         if (Verbose > 1) std::cout<<FuncSig(__func__)<<"dims = "<<dims[0]<<" "<<dims[1]<<std::endl;
         numParticles = dims[0];
@@ -141,7 +179,7 @@ class FlashParticles
             if (Verbose > 1) std::cout<<FuncSig(__func__)<<"PropertyNames = '"<<PropertyNames[i]<<"'"<< std::endl;
         }
         delete [] cdata;
-    }
+    };
 
     /**
       * GetParticleTypes
@@ -216,7 +254,7 @@ class FlashParticles
             if (Verbose > 1) std::cout<<"  np="<<PartTypeCount[it->first]<<" (type:"<<it->first<<",id:"<<PartType[it->first]<<")";
         }
         if (Verbose > 1) std::cout<<std::endl;
-    }
+    };
 
     public: void PrintInfo(void)
     {
@@ -229,27 +267,27 @@ class FlashParticles
             }
             std::cout<<std::endl;
         }
-    }
+    };
 
     /// ReadVar (overloaded to read all particle types and full length of particle array)
     public: FLASH_PARTICLES_REAL * ReadVar(const std::string varname)
     {
         return ReadVarAll(varname, 0, numParticles);
-    }
+    };
 
     /// ReadVar (overloaded to read all particle types, starting from start_index with length 'size')
     public: FLASH_PARTICLES_REAL * ReadVar(const std::string varname,
                                            const long start_index, const long size)
     {
         return ReadVarAll(varname, start_index, size);
-    }
+    };
 
     /// ReadVar (overloaded to read requested particle type and full length of particle array)
     public: FLASH_PARTICLES_REAL * ReadVar(const std::string varname, const std::string type_req)
     {
         long size = numParticles;
         return ReadVar(varname, type_req, 0, size);
-    }
+    };
 
     /// ReadVar (read particle variable from file, given a type request, starting from start_index with length 'size')
     public: FLASH_PARTICLES_REAL * ReadVar(const std::string varname, const std::string type_req,
@@ -274,13 +312,13 @@ class FlashParticles
         for (long i=0; i<size; i++) ret[i] = tmp[i]; // copy only up to index=size, i.e., only the type-matched data
         delete [] var; delete [] type; delete [] tmp;
         return ret;
-    }
+    };
 
     /// ReadVarAll (overloaded to read full length of particle array; all particle types included)
     public: FLASH_PARTICLES_REAL * ReadVarAll(const std::string varname)
     {
         return ReadVarAll(varname, 0, numParticles);
-    }
+    };
 
     /// ReadVarAll (read particle variable from file; all particle types included, starting from start_index with length 'size')
     public: FLASH_PARTICLES_REAL * ReadVarAll(const std::string varname,
@@ -301,13 +339,13 @@ class FlashParticles
         hsize_t count[2] = {(hsize_t)size, 1};
         hdfio.read_slab(DataPointer, "tracer particles", FLASH_PARTICLES_H5_REAL, offset, count, 1, out_offset, out_count);
         return DataPointer;
-    }
+    };
 
     /// ReadSinkData into map of vectors (input: string prop_name)
     public: std::map<std::string, std::vector<FLASH_PARTICLES_REAL> > ReadSinkData(const std::string prop_name) {
         std::vector<std::string> prop_names; prop_names.push_back(prop_name);
         return ReadSinkData(prop_names);
-    }
+    };
 
     /// ReadSinkData into map of vectors (input: vector<string> prop_names)
     public: std::map<std::string, std::vector<FLASH_PARTICLES_REAL> > ReadSinkData(const std::vector<std::string> prop_names) {
@@ -318,7 +356,7 @@ class FlashParticles
             delete [] tmp;
         }
         return ret;
-    }
+    };
 
     // Domain decomposition.
     // Inputs: MPI rank (MyPE), total number of MPI ranks (NPE), total number of particles to distribute (np).
@@ -341,21 +379,57 @@ class FlashParticles
         if ((MyPE == 0 && Verbose > 0) && (NPE_in_use < NPE))
             std::cout<<FuncSig(__func__)<<"Warning: non-optimal load balancing; "<<NPE-NPE_in_use<<" core(s) remain(s) idle."<<std::endl;
         return MyParticles;
-    }
+    };
 
     /// Return particle filename
     public: std::string GetFilename()
-    { return Filename; }
+    { return Filename; };
     /// Return number of particles
     public: long GetN()
-    { return numParticles; }
+    { return numParticles; };
     /// Return particle names
     public: std::vector<std::string> GetPropertyNames()
-    { return PropertyNames; }
+    { return PropertyNames; };
     public: std::map<std::string, int> GetType()
-    { return PartType; }
+    { return PartType; };
     public: std::map<std::string, int> GetTypeCount()
-    { return PartTypeCount; }
+    { return PartTypeCount; };
+
+        /// OverwriteParticleNames (note that this overwrites STRSIZE 24 with STRSIZE 40)
+    public: void OverwriteParticleNames(const std::vector<std::string> particle_names)
+    {
+        // copy input strings -> c-strings (of fixed size)
+        const int string_size = 40;
+        const int n_names = particle_names.size();
+        std::vector<char> unk_labels_flat(n_names * string_size);
+        for (int i = 0; i < n_names; i++) std::strcpy(&unk_labels_flat[i * string_size], particle_names[i].c_str());
+        // get file ID, delete previous particle names and write new one
+        hid_t File_id = hdfio.getFileID();
+        hid_t string_type = H5Tcopy(H5T_C_S1);
+        H5Tset_size(string_type, string_size);
+        H5Ldelete(File_id, "particle names", H5P_DEFAULT); // delete dataset
+        const int rank = 2; hsize_t dimens_2d[rank]; dimens_2d[0] = n_names; dimens_2d[1] = 1;
+        hid_t dataspace = H5Screate_simple(rank, dimens_2d, NULL);
+        hid_t dataset = H5Dcreate(File_id, "particle names", string_type, dataspace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        /// create property list for collective dataset i/o
+        hid_t plist_id = H5P_DEFAULT;
+#ifdef H5_HAVE_PARALLEL
+        if (mpi_comm != MPI_COMM_NULL) {
+            plist_id = H5Pcreate(H5P_DATASET_XFER);
+            H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+        }
+#endif
+        H5Dwrite(dataset, string_type, H5S_ALL, H5S_ALL, plist_id, unk_labels_flat.data());
+#ifdef H5_HAVE_PARALLEL
+        if (mpi_comm != MPI_COMM_NULL) {
+            herr_t HDF5_status = H5Pclose(plist_id);
+            assert( HDF5_status != -1 );
+        }
+#endif
+        H5Tclose(string_type);
+        H5Sclose(dataspace);
+        H5Dclose(dataset);
+    };
 
 }; // end: FlashParticles
 #endif
