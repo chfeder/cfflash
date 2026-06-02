@@ -163,22 +163,10 @@ class FlashParticles
         numParticles = dims[0];
         if (Verbose > 1) std::cout<<FuncSig(__func__)<<Filename<<" contains total of "<<numParticles<<" particles."<<std::endl;
         /// read particle property names
-        const unsigned int string_size = 24;
-        hid_t string_type = H5Tcopy(H5T_C_S1);
-        H5Tset_size(string_type, string_size);
-        int nnames = hdfio.getDims("particle names")[0];
-        if (Verbose > 1) std::cout<<FuncSig(__func__)<<"nnames = "<<nnames<< std::endl;
-        char * cdata = new char[nnames*string_size];
-        hdfio.read(cdata, "particle names", string_type);
-        PropertyNames.resize(nnames);
-        for (unsigned int i = 0; i < PropertyNames.size(); i++) {
-            std::string tmp_str; tmp_str.resize(0);
-            for (unsigned int j = 0; j < string_size; j++) tmp_str.push_back(cdata[i*string_size+j]);
-            PropertyNames[i] = tmp_str;
-            PropertyNames[i].erase(PropertyNames[i].find_last_not_of(" \n\r\t")+1); // clear whitespace
-            if (Verbose > 1) std::cout<<FuncSig(__func__)<<"PropertyNames = '"<<PropertyNames[i]<<"'"<< std::endl;
-        }
-        delete [] cdata;
+        PropertyNames = ReadParticleNames();
+        if (Verbose > 1)
+            for (unsigned int i = 0; i < PropertyNames.size(); i++)
+                std::cout<<FuncSig(__func__)<<"PropertyNames = '"<<PropertyNames[i]<<"'"<< std::endl;
     };
 
     /**
@@ -395,7 +383,52 @@ class FlashParticles
     public: std::map<std::string, int> GetTypeCount()
     { return PartTypeCount; };
 
-        /// OverwriteParticleNames (note that this overwrites STRSIZE 24 with STRSIZE 40)
+    /// ReadParticleNames
+    public: std::vector<std::string> ReadParticleNames(void)
+    {
+        hid_t File_id = hdfio.getFileID();
+        hid_t dataset = H5Dopen(File_id, "particle names", H5P_DEFAULT);
+        hid_t dataspace = H5Dget_space(dataset);
+        const int rank = H5Sget_simple_extent_ndims(dataspace);
+        std::vector<hsize_t> dimens_2d(rank);
+        H5Sget_simple_extent_dims(dataspace, dimens_2d.data(), NULL);
+        const int n_names = dimens_2d[0];
+        // mallocate output
+        char ** unk_labels = (char **) malloc (n_names * sizeof (char *));
+        // determine whether this is a string of fixed or variable size
+        hid_t string_type = H5Tcopy(H5T_C_S1);
+        hid_t filetype = H5Dget_type(dataset);
+        htri_t variable_length_string = H5Tis_variable_str(filetype);
+        // in case it's a string of fixed length:
+        if (variable_length_string == 0) {
+            size_t string_size = H5Tget_size(filetype); string_size++; /* Make room for null terminator */
+            // some horrible additional pointer stuff allocation
+            unk_labels[0] = (char *) malloc (n_names * string_size * sizeof (char));
+            for (int i = 1; i < n_names; i++) unk_labels[i] = unk_labels[0] + i * string_size;
+            H5Tset_size(string_type, string_size);
+            H5Dread(dataset, string_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, unk_labels[0]);
+        }
+        // in case it's a string of variable length:
+        if (variable_length_string == 1) {
+            H5Tset_size(string_type, H5T_VARIABLE);
+            H5Dread(dataset, string_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, unk_labels);
+        }
+        // copy c-strings into std::strings
+        std::vector<std::string> ret(n_names);
+        for (int i = 0; i < n_names; i++) {
+            ret[i] = unk_labels[i];
+            ret[i].erase(ret[i].find_last_not_of(" \n\r\t")+1); // clear whitespace
+        }
+        // garbage collection
+        free (unk_labels[0]);
+        free (unk_labels);
+        H5Tclose(string_type);
+        H5Sclose(dataspace);
+        H5Dclose(dataset);
+        return ret;
+    };
+
+    /// OverwriteParticleNames (note that this overwrites STRSIZE 24 with STRSIZE 40)
     public: void OverwriteParticleNames(const std::vector<std::string> particle_names)
     {
         // copy input strings -> c-strings (of fixed size)
