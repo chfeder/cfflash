@@ -498,6 +498,11 @@ int ParseInputs(const vector<string> Argument)
 
     stringstream dummystream;
 
+    if (Argument.size() == 1) {
+        if (MyPE==0) cout << endl << "Need to specify input file as 1st argument. Exiting." << endl;
+        return -1;
+    }
+
     inputfile = Argument[1];
 
     for (unsigned int i = 2; i < Argument.size(); i++)
@@ -547,9 +552,6 @@ int ParseInputs(const vector<string> Argument)
     if (splitnum == 0) {
         if (MyPE==0) cout << endl << "Need to specify the number of split files with '-sn'. Exiting." << endl;
         return -1;
-    }
-    if (DatasetNames.size() == 0) {
-        if (MyPE==0) cout << endl << "Warning: no datasets selected for merging; only meta data will be merged; use '-dsets' to select datasets (e.g., 'dens velx' ...)." << endl;
     }
 
     return 0;
