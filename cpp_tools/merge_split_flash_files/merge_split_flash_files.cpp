@@ -64,8 +64,7 @@ int main(int argc, char * argv[])
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &NPE);
     MPI_Comm_rank(MPI_COMM_WORLD, &MyPE);
-
-    long starttime = time(NULL);
+    if (Verbose && MyPE==0) cout<<" === merge_split_flash_files === using MPI num procs: "<<NPE<<endl;
 
     /// Parse inputs
     vector<string> Arguments(argc);
@@ -77,7 +76,7 @@ int main(int argc, char * argv[])
         MPI_Finalize(); return 0;
     }
 
-    if (Verbose && MyPE==0) cout<<"=== merge_split_flash_files === using MPI num procs: "<<NPE<<endl;
+    long starttime = time(NULL);
 
     /// determine dump number, i/o filename(s), plt or chk or part file type, etc.
     string dump_str = inputfile.substr(inputfile.size()-4, 4);
