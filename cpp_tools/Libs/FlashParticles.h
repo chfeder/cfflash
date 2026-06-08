@@ -158,7 +158,7 @@ class FlashParticles
     {
         /// read number of particles
         if (!hdfio.dataset_exists("tracer particles")) return;
-        std::vector<int> dims = hdfio.getDims("tracer particles");
+        std::vector<long> dims = hdfio.getDims("tracer particles");
         if (Verbose > 1) std::cout<<FuncSig(__func__)<<"dims = "<<dims[0]<<" "<<dims[1]<<std::endl;
         numParticles = dims[0];
         if (Verbose > 1) std::cout<<FuncSig(__func__)<<Filename<<" contains total of "<<numParticles<<" particles."<<std::endl;
@@ -349,21 +349,21 @@ class FlashParticles
     // Domain decomposition.
     // Inputs: MPI rank (MyPE), total number of MPI ranks (NPE), total number of particles to distribute (np).
     // Return indices of particles for MyPE.
-    public: std::vector<int> GetMyParticles(const int MyPE, const int NPE, const long np)
+    public: std::vector<long> GetMyParticles(const int MyPE, const int NPE, const long np)
     {
-        std::vector<int> MyParticles(0);
-        unsigned int Div = ceil( (double)(np) / (double)(NPE) );
-        int NPE_main = np / Div;
-        unsigned int Mod = np - NPE_main * Div;
+        std::vector<long> MyParticles(0);
+        unsigned long Div = ceil( (double)(np) / (double)(NPE) );
+        long NPE_main = np / Div;
+        unsigned long Mod = np - NPE_main * Div;
         if (MyPE < NPE_main) // (NPE_main) cores get Div particles
-            for (unsigned int i = 0; i < Div; i++) MyParticles.push_back(MyPE*Div+i);
+            for (unsigned long i = 0; i < Div; i++) MyParticles.push_back(MyPE*Div+i);
         if (MyPE==0 && Verbose > 0) std::cout<<FuncSig(__func__)<<"First "<<NPE_main<<" core(s) carry(ies) "<<Div<<" particle(s) (each)."<<std::endl;
         if ((MyPE == NPE_main) && (Mod > 0)) { // core (NPE_main + 1) gets the rest (Mod)
-            for (unsigned int i = 0; i < Mod; i++)
+            for (unsigned long i = 0; i < Mod; i++)
                 MyParticles.push_back(NPE_main*Div+i);
             if (Verbose > 0) std::cout<<FuncSig(__func__)<<"Core #"<<NPE_main+1<<" carries "<<Mod<<" particle(s)."<<std::endl;
         }
-        int NPE_in_use = NPE_main; if (Mod > 0) NPE_in_use += 1;
+        long NPE_in_use = NPE_main; if (Mod > 0) NPE_in_use += 1;
         if ((MyPE == 0 && Verbose > 0) && (NPE_in_use < NPE))
             std::cout<<FuncSig(__func__)<<"Warning: non-optimal load balancing; "<<NPE-NPE_in_use<<" core(s) remain(s) idle."<<std::endl;
         return MyParticles;

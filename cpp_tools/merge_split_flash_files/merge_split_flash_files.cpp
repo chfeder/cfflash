@@ -384,7 +384,7 @@ int main(int argc, char * argv[])
 
             /// Create target particle dataset with zeros (in parallel).
             HDFIO hdfio_out = HDFIO(outputfile, 'w');
-            vector<int> dims(2);
+            vector<long> dims(2);
             dims[0] = np_tot;
             dims[1] = ParticleProperties.size();
             hdfio_out.create_dataset("tracer particles", dims, FLASH_PARTICLES_H5_REAL, MPI_COMM_WORLD);
@@ -401,7 +401,7 @@ int main(int argc, char * argv[])
                 Particles = FlashParticles(filename);
                 long np = Particles.GetN();
                 // domain decomposition
-                vector<int> MyParts = Particles.GetMyParticles(MyPE, NPE, np);
+                vector<long> MyParts = Particles.GetMyParticles(MyPE, NPE, np);
                 for (unsigned int ipp=0; ipp<ParticleProperties.size(); ipp++) {
                     // read slab
                     FLASH_PARTICLES_REAL *prop = Particles.ReadVar(ParticleProperties[ipp], MyParts[0], MyParts.size());

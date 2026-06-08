@@ -409,7 +409,7 @@ int main(int argc, char * argv[])
         // distribute affected blocks equally amongst processors (parallelisation)
         vector<int> MyBlocks;
         if (!make_starfield) MyBlocks = gg.GetMyBlocks(MyPE, NPE, AffectedBlocks, true); /// affected leaf blocks (allow_idle_cores=true)
-        vector<int> MyParts;
+        vector<long> MyParts;
         if (make_starfield) { // in this case, we parallelise over the sinks, but let each core have all blocks to work on
             MyBlocks = AffectedBlocks;
             if (Verbose && MyPE==0) cout<<" Parallelising over sink particles; each core has "<<MyBlocks.size()<<" blocks."<<endl;

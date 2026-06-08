@@ -1689,7 +1689,7 @@ class FlashGG
     /// ReadNumBlocks
     private: void ReadNumBlocks(void)
     {
-        std::vector<int>Dim(3);
+        std::vector<long>Dim(3);
         Dim = hdfio.getDims(bounding_box_datasetname);
         NumBlocks    = Dim[0];
         NumBlocksRep = NumBlocks; // default is no block replicas
@@ -1724,7 +1724,7 @@ class FlashGG
     /// ReadNodeType
     private: void ReadNodeType(void)
     {
-        std::vector<int>Dim(1);
+        std::vector<long>Dim(1);
         Dim = hdfio.getDims(node_type_datasetname);
         NumBlocks = Dim[0];
         int * NodeTypePointer = new int[NumBlocks];
@@ -1738,7 +1738,7 @@ class FlashGG
     /// ReadBoundingBoxAndMinMaxDomain
     private: void ReadBoundingBoxAndMinMaxDomain(void)
     {
-        std::vector<int>Dim(3);
+        std::vector<long>Dim(3);
         Dim = hdfio.getDims(bounding_box_datasetname);
         NumBlocks = Dim[0];
         NumDims   = Dim[1];
