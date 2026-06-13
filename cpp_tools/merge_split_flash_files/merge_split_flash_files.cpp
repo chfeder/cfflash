@@ -406,9 +406,12 @@ int main(int argc, char * argv[])
                     // read slab
                     FLASH_PARTICLES_REAL *prop = Particles.ReadVar(ParticleProperties[ipp], MyParts[0], MyParts.size());
                     // overwrite slab
+                    hsize_t offset[2] = {np_tot_accum + static_cast<unsigned long>(MyParts[0]), ipp};
+                    hsize_t count[2] = {MyParts.size(), 1};
+                    hsize_t out_offset[2] = {0, 0};
+                    hsize_t out_count[2] = {MyParts.size(), 1};
                     hdfio_out.overwrite_slab(prop, "tracer particles", FLASH_PARTICLES_H5_REAL,
-                        (hsize_t[]){np_tot_accum+(unsigned long)MyParts[0],ipp}, (hsize_t[]){MyParts.size(),1},
-                        2, (hsize_t[]){0,0}, (hsize_t[]){MyParts.size(),1}, MPI_COMM_WORLD);
+                        offset, count, 2, out_offset, out_count, MPI_COMM_WORLD);
                 } // loop over particle properties
                 // accumulate total particle count for offset
                 np_tot_accum += np;
