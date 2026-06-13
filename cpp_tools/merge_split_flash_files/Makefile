@@ -33,7 +33,7 @@ endif
 
 # SuperMUC
 ifneq (,$(findstring sng.lrz.de,$(HOST)))
-CXX       = mpiCC
+CXX       = mpicxx
 HDF5_PATH = $(HDF5_BASE)
 SZIP_PATH = $(SZIP_BASE)
 CCFLAGS = -O3
