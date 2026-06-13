@@ -48,7 +48,7 @@ CCFLAGS += -I$(HDF5_PATH)/include
 LDFLAGS += -L$(HDF5_PATH)/lib -lhdf5 -lz
 FFTW_PATH = $(FFTW_BASE)
 CCFLAGS += $(FFTW_INC)
-LDFLAGS += $(FFTW_LIB) -lfftw3_mpi -lfftw3f_mpi -lfftw3 -lfftw3f
+LDFLAGS += -L$(FFTW_LIBDIR) -lfftw3_mpi -lfftw3f_mpi -lfftw3 -lfftw3f
 endif
 
 # MSO
