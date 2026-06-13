@@ -93,8 +93,8 @@ int main(int argc, char * argv[])
         MPI_Barrier(MPI_COMM_WORLD);
         usleep(1000*(MyPE+1));
         cout<<"["<<MyPE<<"] My blocks = ";
-        for (unsigned int b=0; b<MyBlocks.size(); b++)
-            cout<<MyBlocks[b]<<" "; cout << endl;
+        for (unsigned int b=0; b<MyBlocks.size(); b++) cout<<MyBlocks[b]<<" ";
+        cout << endl;
     }
 
     if (MyPE==0) cout << "Entering merging loop now..." << endl;
