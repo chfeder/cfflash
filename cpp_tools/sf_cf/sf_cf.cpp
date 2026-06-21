@@ -5,7 +5,7 @@
   Computes structure functions or correlation functions of
   grid variables from FLASH output files
 
-  By Christoph Federrath, 2013-2025
+  By Christoph Federrath, 2013-2026
 
 */
 
@@ -1220,7 +1220,7 @@ void HelpMe(void)
         << "     -take_abs               : take absolute value of data increment prior to accumulation" << endl
         << "     -opath <path>           : specify output path" << endl
         << endl
-        << "Example: sf_cf sf DF_hdf5_plt_cnt_0020 -n 1e6 -types 1 8"
+        << "Example: sf_cf DF_hdf5_plt_cnt_0020 -n 1e6 -types 1 8"
         << endl << endl;
     }
 }
